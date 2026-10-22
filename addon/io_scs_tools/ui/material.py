@@ -494,6 +494,8 @@ class SCS_TOOLS_PT_MaterialAttributes(_MaterialPanelBlDefs, Panel):
             value_layout.prop(mat.scs_props, 'shader_attribute_tint_opacity', text="")
         elif tag == 'queue_bias':
             value_layout.prop(mat.scs_props, 'shader_attribute_queue_bias', text="")
+        elif tag == 'is_dynamic_road':
+            value_layout.prop(mat.scs_props, 'shader_attribute_is_dynamic_road', text="")
         elif tag.startswith("aux") and hasattr(mat.scs_props, "shader_attribute_" + tag):
 
             col = value_layout.column().column(align=True)
@@ -502,6 +504,10 @@ class SCS_TOOLS_PT_MaterialAttributes(_MaterialPanelBlDefs, Panel):
 
             for item in auxiliary_prop:
                 col.prop(item, 'value', text="")
+
+        elif ("shader_attribute_" + tag) in mat.scs_props.keys():
+            # attribute without dedicated Blender property (newer material format, e.g. heightmap_*)
+            value_layout.prop(mat.scs_props, '["shader_attribute_%s"]' % tag, text="")
 
         else:
             value_layout.label(text="Undefined Shader Attribute Type!", icon=label_icon)
@@ -523,6 +529,17 @@ class SCS_TOOLS_PT_MaterialAttributes(_MaterialPanelBlDefs, Panel):
         attrs_column = layout.column()  # create column for compact display with alignment
         for attribute_key in sorted(self.attributes_data.keys()):
             self.draw_attribute_item(attrs_column, mat, _UI_SPLIT_PERC, self.attributes_data[attribute_key])
+
+        # attributes kept from import that the shader preset doesn't define (newer material format)
+        from ..utils import mat_attrs as _mat_attrs
+        extras = _mat_attrs.get_extra_attributes(mat)
+        if extras:
+            box = layout.box().column(align=True)
+            box.label(text="Extra attributes from import (written back on export):", icon='IMPORT')
+            for attr_format, attr_tag, attr_values in extras:
+                values = ", ".join(("%g" % v) if isinstance(v, (int, float)) else str(v) for v in attr_values)
+                note = "" if not _mat_attrs.is_new_format_only(attr_tag) else "  (AutoMat export only)"
+                box.label(text="%s = %s%s" % (attr_tag, values, note))
 
 
 class SCS_TOOLS_PT_MaterialTextures(_MaterialPanelBlDefs, Panel):

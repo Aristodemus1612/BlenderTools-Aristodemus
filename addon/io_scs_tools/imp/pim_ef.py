@@ -450,7 +450,7 @@ def _create_piece(
                     import re
 
                     for alias in mesh_uv_aliases[used_mat_idx][uv_lay]:
-                        numbers = re.findall("\d+", alias)
+                        numbers = re.findall(r"\d+", alias)
                         number = numbers[len(numbers) - 1]
                         alias_mapping[number] = uv_lay
 

@@ -369,6 +369,8 @@ class Paths(_ConfigSection):
             "SunProfilesFilePath": (str, get_default(scs_globals, 'sun_profiles_lib_path'), None),
             "ConvertersPath": (str, get_default(scs_globals, 'conv_hlpr_converters_path'), None),
             "UseAlternativeBases": (int, get_default(scs_globals, 'use_alternative_bases'), 'use_alternative_bases'),
+            "AdditionalDataPaths": (str, get_default(scs_globals, 'additional_data_paths'), 'additional_data_paths'),
+            "UNLinesCountry": (str, get_default(scs_globals, 'un_lines_country'), 'un_lines_country'),
 
         }
 
@@ -683,12 +685,39 @@ class AsyncPathsInit:
         # we need window, otherwise 3d view report can't add modal handler for user close/minimize/scroll actions
         assert len(windows) > 0
 
-        with bpy.context.temp_override(window=windows[-1]):  # using first one borks filebrowser UI for unknown reason, but last one works
-            bpy.ops.wm.scs_tools_show_3dview_report('INVOKE_DEFAULT',
-                                                    message=message,
-                                                    abort=abort,
-                                                    hide_controls=hide_controls,
-                                                    is_progress_message=True)
+        # Attach the report to a window that has a 3D view. Previously the last window was used, which right after
+        # installing/enabling the add-on is the Preferences window: closing it while the modal report handler
+        # was attached crashed Blender 5.x (EXCEPTION_ACCESS_VIOLATION in WM_event_remove_handlers/wm_window_close).
+        target_window = None
+        for window in windows:
+            screen = window.screen
+            if screen and any(area.type == 'VIEW_3D' for area in screen.areas):
+                target_window = window
+                break
+
+        # never start the modal report while a file browser is open (import/export dialogs): its modal handler
+        # fights the file browser's one and the dialog can lose its buttons
+        for window in windows:
+            screen = window.screen
+            if screen and any(area.type == 'FILE_BROWSER' for area in screen.areas):
+                return
+
+        if target_window is None:
+            # no 3D view anywhere: the report would not be visible anyway, so skip it instead of
+            # attaching a modal handler to a temporary window (Preferences, file browser) that can be closed
+            return
+
+        # NOTE: never let a failing progress report raise: this runs inside a bpy.app.timers callback and an exception
+        # there silently unregisters the timer, leaving config lock engaged forever (all SCS settings panels greyed out).
+        try:
+            with bpy.context.temp_override(window=target_window, screen=target_window.screen):
+                bpy.ops.wm.scs_tools_show_3dview_report('INVOKE_DEFAULT',
+                                                        message=message,
+                                                        abort=abort,
+                                                        hide_controls=hide_controls,
+                                                        is_progress_message=True)
+        except Exception as e:
+            lprint("D Paths initialization progress report failed: %s", (e,))
 
     @staticmethod
     def _finish():
@@ -699,21 +728,26 @@ class AsyncPathsInit:
         AsyncPathsInit.__message = ""
         AsyncPathsInit.__paths_list.clear()
 
-        # report finished progress to 3d view report mechanism
-        if int(_get_scs_globals().dump_level) < AsyncPathsInit.DUMP_LEVEL:
-            AsyncPathsInit._report_progress(abort=True)
+        try:
+            # report finished progress to 3d view report mechanism
+            if int(_get_scs_globals().dump_level) < AsyncPathsInit.DUMP_LEVEL:
+                AsyncPathsInit._report_progress(abort=True)
 
-        # when done, tag everything for redraw in the case some UI components
-        # are reporting status of this operator
-        _view3d_utils.tag_redraw_all_regions()
+            # when done, tag everything for redraw in the case some UI components
+            # are reporting status of this operator
+            _view3d_utils.tag_redraw_all_regions()
+        except Exception as e:
+            lprint("D Paths initialization finish report failed: %s", (e,))
 
-        # as last invoke any callbacks and afterwards delete them
+        # as last invoke any callbacks and afterwards delete them (callbacks include config lock release, so they must always run)
         while len(AsyncPathsInit.__callbacks) > 0:
 
-            callback = AsyncPathsInit.__callbacks[0]
+            callback = AsyncPathsInit.__callbacks.pop(0)
 
-            callback()
-            AsyncPathsInit.__callbacks.remove(callback)
+            try:
+                callback()
+            except Exception as e:
+                lprint("E Paths initialization callback %r failed: %s", (getattr(callback, "__name__", callback), e))
 
         lprint("D Paths initialization finish invoked!")
 
@@ -737,7 +771,11 @@ class AsyncPathsInit:
 
         # update message with current path and apply it
         AsyncPathsInit.__message += "Initializing " + AsyncPathsInit.__paths_list[0]["name"] + "..."
-        setattr(scs_globals, AsyncPathsInit.__paths_list[0]["attr"], AsyncPathsInit.__paths_list[0]["path"])
+        try:
+            setattr(scs_globals, AsyncPathsInit.__paths_list[0]["attr"], AsyncPathsInit.__paths_list[0]["path"])
+        except Exception as e:
+            # never let exception escape the timer, otherwise initialization never finishes and config lock stays engaged
+            lprint("E Initialization of %s failed: %s", (AsyncPathsInit.__paths_list[0]["name"], e))
 
         # calculate execution time, remove processed path, update message and counter
         execution_time = time() - start_time
@@ -1644,10 +1682,39 @@ def release_config_lock(use_paths_init_callback=False):
     :param use_paths_init_callback: True if paths initialization is in progress and lock should be release when done; False release lock immidiately
     :type use_paths_init_callback: bool
     """
-    if use_paths_init_callback:
-        AsyncPathsInit.append_callback(release_config_lock)
+    if use_paths_init_callback and AsyncPathsInit.append_callback(release_config_lock):
+
+        # safety net: if paths initialization dies without calling back, release the lock anyway
+        if not bpy.app.timers.is_registered(_config_lock_watchdog):
+            bpy.app.timers.register(_config_lock_watchdog, first_interval=1.0, persistent=True)
+
     else:
+        # paths initialization not running (or callback not wanted), release immediately;
+        # previously the lock stayed engaged forever if initialization wasn't running at this point
         _get_scs_globals().config_update_lock = False
+
+
+def _config_lock_watchdog():
+    """Timer releasing config lock if it stays engaged while no paths initialization is running anymore.
+
+    :return: time of next check or None to unregister
+    :rtype: float | None
+    """
+    try:
+        scs_globals = _get_scs_globals()
+    except Exception:
+        return None
+
+    if not scs_globals.config_update_lock:
+        return None
+
+    if AsyncPathsInit.is_running():
+        return 1.0
+
+    lprint("W Config lock was still engaged after paths initialization ended, releasing it!")
+    scs_globals.config_update_lock = False
+    _view3d_utils.tag_redraw_all_regions()
+    return None
 
 
 def apply_settings(preload_from_blend=False):

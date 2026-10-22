@@ -760,6 +760,77 @@ class Variant:
 
             return {'FINISHED'}
 
+    class SCS_TOOLS_OT_LogVariants(bpy.types.Operator):
+        """Write a log of all variants, parts and their objects of the active SCS Root."""
+        bl_label = "Log Variants & Parts"
+        bl_idname = "object.scs_tools_log_variants"
+        bl_description = ("Write every variant, its parts and the objects of each part (with visibility) into the\n"
+                          "'SCS_variants_log' text (Text Editor) and the system console")
+
+        @classmethod
+        def poll(cls, context):
+            return context.active_object is not None and _object_utils.get_scs_root(context.active_object) is not None
+
+        def execute(self, context):
+            scs_root = _object_utils.get_scs_root(context.active_object)
+            log = _object_utils.build_variant_log(scs_root)
+            text = bpy.data.texts.get("SCS_variants_log") or bpy.data.texts.new("SCS_variants_log")
+            text.clear()
+            text.write(log)
+            print(log)
+            self.report({'INFO'}, "Variant log written to text 'SCS_variants_log' (open it in a Text Editor)")
+            return {'FINISHED'}
+
+    class SCS_TOOLS_OT_ResetVariantPreview(bpy.types.Operator):
+        """Show every part of this model again: preview off, no additional parts or overlay scheme picked."""
+        bl_label = "Reset View"
+        bl_idname = "object.scs_tools_reset_variant_preview"
+        bl_description = ("Show all parts of this model: switches variant preview off and clears the additional "
+                          "parts and overlay scheme picked for the preview (variants themselves aren't changed)")
+        bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+
+        def execute(self, context):
+            scs_root = _object_utils.get_scs_root(context.active_object)
+            if not scs_root:
+                return {'CANCELLED'}
+            for key in ("scs_preview_saved_hidden", "scs_preview_overlay_scheme", "scs_preview_parts_before_all"):
+                if key in scs_root:
+                    del scs_root[key]
+            scs_root.scs_props.scs_root_preview_extra_parts = ""
+            if scs_root.scs_props.scs_root_variant_preview:
+                scs_root.scs_props.scs_root_variant_preview = False   # nothing saved -> shows everything
+            else:
+                _object_utils.apply_variant_visibility(scs_root, None)
+            return {'FINISHED'}
+
+    class SCS_TOOLS_OT_TogglePreviewExtraPart(bpy.types.Operator):
+        """Show/hide an additional part (in no variant) during variant preview."""
+        bl_label = "Toggle Additional Part"
+        bl_idname = "object.scs_tools_toggle_preview_extra_part"
+        bl_description = "Show or hide this additional part (edge line, rumble strip, overlay) while previewing variants"
+        bl_options = {'INTERNAL'}
+
+        part_name: StringProperty()
+
+        def execute(self, context):
+            scs_root = _object_utils.get_scs_root(context.active_object)
+            if not scs_root:
+                return {'CANCELLED'}
+            parts = [p for p in scs_root.scs_props.scs_root_preview_extra_parts.split(";") if p]
+            if self.part_name.endswith("*"):
+                prefix = self.part_name[:-1]
+                group = [p for p in _object_utils.get_parts_in_no_variant(scs_root) if p.startswith(prefix)]
+                if all(p in parts for p in group):
+                    parts = [p for p in parts if p not in group]
+                else:
+                    parts += [p for p in group if p not in parts]
+            elif self.part_name in parts:
+                parts.remove(self.part_name)
+            else:
+                parts.append(self.part_name)
+            scs_root.scs_props.scs_root_preview_extra_parts = ";".join(parts)
+            return {'FINISHED'}
+
     class SCS_TOOLS_OT_AddVariant(bpy.types.Operator):
         """Add SCS Variant to actual SCS Game Object."""
         bl_label = "Add SCS Variant"
@@ -2805,6 +2876,9 @@ classes = (
     ShadowCasters.SCS_TOOLS_OT_ShowShadowCasterAsTextured,
     ShadowCasters.SCS_TOOL_OT_SwitchShadowCasters,
 
+    Variant.SCS_TOOLS_OT_LogVariants,
+    Variant.SCS_TOOLS_OT_TogglePreviewExtraPart,
+    Variant.SCS_TOOLS_OT_ResetVariantPreview,
     Variant.SCS_TOOLS_OT_AddVariant,
     Variant.SCS_TOOLS_OT_PrintVariants,
     Variant.SCS_TOOLS_OT_RemoveActiveVariant,

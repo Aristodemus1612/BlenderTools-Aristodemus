@@ -451,6 +451,51 @@ class ObjectSCSTools(bpy.types.PropertyGroup):
         get=get_active_scs_look,
         set=set_active_scs_look
     )
+    def apply_variant_preview(self, context=None):
+        """Shows only objects of parts included in active variant, if variant preview is enabled on this SCS Root.
+        Objects of parts not used by any variant (eg. UN road overlay parts added by road look overlay schemes)
+        are hidden as well, as the game also doesn't show them for the variant itself.
+
+        Hiding is deferred to a timer, so it runs outside of the UI list update and the 3D views are redrawn.
+        """
+        scs_root = self.id_data
+        if not scs_root or not self.scs_root_variant_preview:
+            return None
+
+        root_name = scs_root.name
+
+        def _deferred():
+            root = bpy.data.objects.get(root_name)
+            if root:
+                _object_utils.apply_variant_visibility(root, root.scs_props.active_scs_variant)
+            return None
+
+        if bpy.app.background:
+            _deferred()
+        else:
+            bpy.app.timers.register(_deferred, first_interval=0.0)
+        return None
+
+    def active_scs_variant_update(self, context):
+        return self.apply_variant_preview(context)
+
+    def scs_root_variant_preview_update(self, context):
+        scs_root = self.id_data
+        if self.scs_root_variant_preview:
+            # remember what the viewport looked like, so switching preview off brings it back
+            if scs_root:
+                scs_root["scs_preview_saved_hidden"] = ";".join(_object_utils.get_hidden_objects_of_scs_root(scs_root))
+            return self.apply_variant_preview(context)
+
+        # preview switched off: back to the view from before preview was switched on (or show everything)
+        if scs_root:
+            saved = scs_root.get("scs_preview_saved_hidden", None)
+            if saved is None:
+                _object_utils.apply_variant_visibility(scs_root, None)
+            else:
+                _object_utils.restore_hidden_objects_of_scs_root(scs_root, [n for n in saved.split(";") if n])
+        return None
+
     active_scs_variant: IntProperty(
         name="Active SCS Variant",
         description="Active SCS Variant for current SCS Game Object",
@@ -459,6 +504,23 @@ class ObjectSCSTools(bpy.types.PropertyGroup):
         step=1,
         options={'HIDDEN'},
         subtype='NONE',
+        update=active_scs_variant_update,
+    )
+    scs_root_preview_extra_parts: StringProperty(
+        name="Additional Parts Shown",
+        description="Parts that belong to no variant (road look additional parts: edge lines, rumble strips, overlays)\n"
+                    "kept visible during variant preview. Semicolon separated",
+        default="",
+        options={'HIDDEN'},
+        update=lambda self, context: self.apply_variant_preview(context),
+    )
+    scs_root_variant_preview: BoolProperty(
+        name="Preview Active Variant",
+        description="Show only the parts of the active variant in the viewport whenever you click a variant in the list.\n"
+                    "Switch off to go back to the view from before preview was switched on",
+        default=True,
+        options={'HIDDEN'},
+        update=scs_root_variant_preview_update,
     )
 
     def active_scs_animation_update(self, context):

@@ -824,6 +824,17 @@ class MaterialSCSTools(bpy.types.PropertyGroup):
         update=__update_look__
     )
 
+    shader_attribute_is_dynamic_road: IntProperty(
+        name="Is Dynamic Road",
+        description="SCS shader 'Is dynamic road' value. Set to 1 on universal (UN) road template line/overlay "
+                    "decal materials (eut2.dif.spec.decal.over), as in SCS's own UN road templates",
+        default=0,
+        min=0,
+        max=1,
+        options={'HIDDEN'},
+        update=__update_look__
+    )
+
     # TEXTURE: BASE
     shader_texture_base: StringProperty(
         name="Texture Base",

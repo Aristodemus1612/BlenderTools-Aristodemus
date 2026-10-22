@@ -32,6 +32,7 @@ from io_scs_tools.imp.transition_structs.terrain_points import TerrainPntsTrans
 from io_scs_tools.internals import inventory as _inventory
 from io_scs_tools.utils import get_scs_globals as _get_scs_globals
 from io_scs_tools.utils import material as _material_utils
+from io_scs_tools.utils import mat_attrs as _mat_attrs
 from io_scs_tools.utils import name as _name_utils
 from io_scs_tools.utils import object as _object_utils
 from io_scs_tools.utils import path as _path_utils
@@ -51,6 +52,33 @@ def _get_shader_data(material_data):
     material_textures = material_data[3]
     material_section = material_data[4]
     return material_effect, material_attributes, material_textures, material_section
+
+
+def _split_extra_attributes(preset_section, material_attributes, material_section):
+    """Split material attributes into those defined by the preset and extra ones the preset doesn't know.
+    Extra attributes are also removed from material section, so they are not applied as preset attributes.
+
+    :return: (preset attributes dict, extra attributes dict)
+    :rtype: (dict, dict)
+    """
+    preset_tags = {"substance"}
+    for item in preset_section.sections:
+        if item.type == "Attribute":
+            preset_tags.add(item.get_prop_value("Tag"))
+
+    kept = {}
+    extra = {}
+    for tag, value in material_attributes.items():
+        if tag in preset_tags:
+            kept[tag] = value
+        else:
+            extra[tag] = value
+
+    if extra and material_section is not None:
+        material_section.sections = [sec for sec in material_section.sections
+                                     if not (sec.type == "Attribute" and sec.get_prop_value("Tag") in extra)]
+
+    return kept, extra
 
 
 def _are_shader_data_compatible(preset_section, material_attributes, material_textures, material_name):
@@ -298,6 +326,16 @@ def _create_scs_root_object(name, loaded_variants, loaded_looks, mats_info, obje
 
                 # try to find suitable preset
                 (preset_name, preset_section) = _material_utils.find_preset(material_effect, material_textures)
+
+                # attributes the preset doesn't define (newer material format: diffuse_secondary, is_terrain_material, ...)
+                # are kept aside on the material and written back on export, instead of making the material "<imported>"
+                if preset_section:
+                    material_attributes, extra_attributes = _split_extra_attributes(preset_section, material_attributes, material_section)
+                    if look_i == 0:
+                        _mat_attrs.set_extra_attributes(mat, extra_attributes)
+                    if extra_attributes:
+                        lprint("I Material %r: attributes kept outside the shader preset: %s",
+                               (mat.name, ", ".join(sorted(extra_attributes.keys()))))
 
                 # we don't support effect mismatch between looks, even if game works with it, somehow.
                 # most probably imported model is result of third party software, thus let user know and skip look for this material

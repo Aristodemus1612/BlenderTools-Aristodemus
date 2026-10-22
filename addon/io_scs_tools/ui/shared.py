@@ -140,6 +140,8 @@ def draw_export_panel(layout, ignore_extra_boxes=False):
     box2.use_property_split = True
     box2.use_property_decorate = False
     box2.prop(_get_scs_globals(), 'export_output_type')
+    if _get_scs_globals().export_output_type == '5':
+        _draw_legacy_material_warning(box2)
     '''
     col = box2.column()
     col.prop(_get_scs_globals(), 'export_pim_file', text="Export Model (PIM)", toggle=True)
@@ -265,3 +267,18 @@ def register():
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
+
+
+def _draw_legacy_material_warning(layout):
+    """Warn that the legacy material output can't carry settings of newer game materials."""
+    from ..utils import mat_attrs as _mat_attrs
+    affected = _mat_attrs.get_materials_needing_automat(bpy.data.materials)
+    col = layout.column(align=True)
+    if affected:
+        col.alert = True
+        col.label(text="%d material(s) use settings the legacy format can't store:" % len(affected), icon='ERROR')
+        col.label(text="    " + ", ".join(affected[:3]) + (", ..." if len(affected) > 3 else ""))
+        col.label(text="    They would be left out (edge blend / heightmap, secondary diffuse, terrain).")
+        col.label(text="    Pick \"Game Data Format, ver. 5 (AutoMat)\" to keep them.")
+    else:
+        col.label(text="Legacy material format. Newer game materials need AutoMat.", icon='INFO')

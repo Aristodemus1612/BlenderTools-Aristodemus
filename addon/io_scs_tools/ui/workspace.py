@@ -94,6 +94,18 @@ class SCS_TOOLS_PT_PathSettings(_WorkspacePanelBlDefs, Panel):
         row.prop(scs_globals, 'use_alternative_bases', icon=icon, icon_only=True)
         row.operator('scene.scs_tools_select_project_path', text="", icon='FILEBROWSER')
 
+        # Additional data folders (game folder, extracted archives, mods) searched as fallback
+        layout.label(text="Additional Data Folders (';' separated):", icon='NEWFOLDER')
+        row = layout.row(align=True)
+        extra_entries = [e.strip() for e in scs_globals.additional_data_paths.replace("|", ";").split(";") if e.strip()]
+        row.alert = len(extra_entries) != len(_path_utils.get_additional_data_roots())
+        row.prop(scs_globals, 'additional_data_paths', text="")
+        row.operator('scene.scs_tools_add_additional_data_path', text="", icon='ADD')
+
+        # UN road lines preview country
+        layout.label(text="Road Line Country (UN road lines preview):", icon='MOD_CURVE')
+        layout.prop(scs_globals, 'un_lines_country_enum', text="")
+
         # Divide labels and sub paths to columns
         sub_paths_layout = layout.row().split(factor=0.35)
         sub_paths_left_col = sub_paths_layout.column(align=True)

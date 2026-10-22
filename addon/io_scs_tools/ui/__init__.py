@@ -26,6 +26,8 @@ from . import shared
 from . import material
 from . import workspace
 from . import tool_shelf
+from . import variant_grid
+from . import road_look_panel
 
 
 def register():
@@ -35,6 +37,8 @@ def register():
     workspace.register()
     world.register()
     object.register()
+    variant_grid.register()
+    road_look_panel.register()
     mesh.register()
     material.register()
     output.register()
@@ -45,6 +49,8 @@ def unregister():
     tool_shelf.unregister()
     workspace.unregister()
     world.unregister()
+    road_look_panel.unregister()
+    variant_grid.unregister()
     object.unregister()
     mesh.unregister()
     material.unregister()

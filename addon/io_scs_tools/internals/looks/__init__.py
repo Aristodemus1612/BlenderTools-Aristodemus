@@ -29,6 +29,16 @@ _IGNORED_TEXTURE_PROPS = ("_settings", "_locked", "_map_type")
 _IGNORED_PROPS = ("mat_id", "enable_aliasing")
 
 
+
+def _unset_scs_prop(scs_props, name):
+    """Unset SCS material property; plain ID properties (no RNA definition, e.g. heightmap_* attributes)
+    can't be unset with property_unset() in Blender 5, so delete them directly."""
+    try:
+        scs_props.property_unset(name)
+    except TypeError:
+        if name in scs_props.keys():
+            del scs_props[name]
+
 def add_look(root_obj, look_id):
     """Creates and adds look with given ID to SCS root object.
     If look is not yet in dictionary it will be added otherwise nothing will be done.
@@ -153,7 +163,7 @@ def apply_active_look(root_obj, force_apply=False):
             is_not_ignored = not ((prop.startswith("shader_texture") and prop.endswith(_IGNORED_TEXTURE_PROPS)) or prop in _IGNORED_PROPS)
             if prop not in mat_data and valid_prefix and is_not_ignored:
                 lprint("S |- attr unset: %r", (prop,))
-                material.scs_props.property_unset(prop)
+                _unset_scs_prop(material.scs_props, prop)
 
 
 def update_look_from_material(root_obj, material, preset_change=False):
@@ -579,7 +589,10 @@ def __create_material_entry__(material):
     :rtype: dict
     """
     mat_entry = {}
-    for key in material.scs_props.keys():
+    # NOTE: iterate over a snapshot of keys; in Blender 5.x reading a property via getattr below
+    # can add it to the ID property group, which otherwise raises
+    # "IDPropertyGroup changed size during iteration".
+    for key in list(material.scs_props.keys()):
 
         if (key.startswith("shader_texture_") and key.endswith(_IGNORED_TEXTURE_PROPS)) or key in _IGNORED_PROPS:
             lprint("S Ignoring property in create material entry: %r", (key,))
@@ -604,6 +617,11 @@ def __create_material_entry__(material):
                 mat_entry[key] = coll_prop_entry
             else:
                 mat_entry[key] = curr_prop
+
+        elif key.startswith("shader_attribute_"):
+            # plain ID property without RNA definition (e.g. heightmap_* attributes): keep its value per look
+            value = material.scs_props[key]
+            mat_entry[key] = value.to_list() if hasattr(value, "to_list") else value
 
         else:
             lprint("D Create material entry requested invalid property: %r", (key,))

@@ -299,6 +299,41 @@ class Paths:
             context.window_manager.fileselect_add(self)
             return {'RUNNING_MODAL'}
 
+    class SCS_TOOLS_OT_AddAdditionalDataPath(bpy.types.Operator):
+        """Operator for adding a folder to Additional Data Folders."""
+        bl_label = "Add Additional Data Folder"
+        bl_idname = "scene.scs_tools_add_additional_data_path"
+        bl_description = ("Add a folder (game folder, extracted archive, mod) which is searched for textures and TOBJs\n"
+                          "when they aren't found inside SCS Project Base Path")
+
+        # always set default display type so blender won't be using "last used"
+        display_type: get_filebrowser_display_type()
+
+        directory: StringProperty(
+            name="Additional Data Folder",
+            description="Additional data folder path",
+            subtype='DIR_PATH',
+        )
+        filter_glob: StringProperty(default="*.*", options={'HIDDEN'})
+
+        def execute(self, context):
+            scs_globals = _get_scs_globals()
+            new_dir = self.directory.rstrip("\\/")
+            if not new_dir:
+                return {'CANCELLED'}
+
+            entries = [e.strip() for e in scs_globals.additional_data_paths.split(";") if e.strip()]
+            if new_dir not in entries:
+                entries.append(new_dir)
+                scs_globals.additional_data_paths = ";".join(entries)
+
+            return {'FINISHED'}
+
+        def invoke(self, context, event):
+            self.directory = _get_scs_globals().scs_project_path
+            context.window_manager.fileselect_add(self)
+            return {'RUNNING_MODAL'}
+
     class SCS_TOOLS_OT_SelectShaderPresetsPath(bpy.types.Operator):
         """Operator for setting relative or absolute path to Shader Presets Library file."""
         bl_label = "Select Shader Presets Library File"
@@ -3628,6 +3663,7 @@ classes = (
     PaintjobTools.SCS_TOOLS_OT_ImportFromDataSII,
 
     Paths.SCS_TOOLS_OT_SelectProjectPath,
+    Paths.SCS_TOOLS_OT_AddAdditionalDataPath,
     Paths.SCS_TOOLS_OT_SelectShaderPresetsPath,
     Paths.SCS_TOOLS_OT_SelectTriggerActionsLibPath,
     Paths.SCS_TOOLS_OT_SelectSignLibPath,

@@ -385,7 +385,7 @@ class AttributeConverter:
 
                             # Special case for "lod_switch_distance" attribute
                             if conv.name == "lod_switch_distance":
-                                out_val = out_val * 25.0
+                                out_val = tuple(v * 25.0 for v in out_val)
 
                             # If only one value, return it as single value
                             if len(out_val) == 1:

@@ -24,6 +24,7 @@ import shutil
 from . import tobj as _tobj
 from ..consts import Variant as _VARIANT_consts
 from ..utils import path as _path_utils
+from ..utils import mat_attrs as _mat_attrs
 from ..utils import get_scs_globals as _get_scs_globals
 from ..utils.info import get_combined_ver_str
 from ..utils.printout import lprint
@@ -232,6 +233,7 @@ def get_texture_path_from_material(material, texture_type, export_path):
     # CALCULATING TOBJ AND TEXTURE PATHS
     texture_raw_path = getattr(material.scs_props, "shader_" + texture_type, "NO PATH")
     tobj_rel_filepath = tobj_abs_filepath = texture_abs_filepath = ""
+    found_in_additional_root = False
     scs_project_path = _get_scs_globals().scs_project_path.rstrip("\\").rstrip("/")
 
     extensions, texture_raw_path = _path_utils.get_texture_extens_and_strip_path(texture_raw_path)
@@ -241,11 +243,15 @@ def get_texture_path_from_material(material, texture_type, export_path):
 
             # search for relative path inside current scs project base and
             # possible dlc/mod parent folders; use first found
-            for infix in _path_utils.get_possible_project_infixes(include_zero_infix=True, append_sep=True):
+            additional_infixes = [root + os.sep for root in _path_utils.get_additional_data_roots()]
+            for infix in _path_utils.get_possible_project_infixes(include_zero_infix=True, append_sep=True) + additional_infixes:
 
                 curr_path = os.path.join(scs_project_path, infix + texture_raw_path[2:] + ext)
 
                 if os.path.isfile(curr_path):
+
+                    # never write TOBJs into additional data folders (game folder, mods), they are read-only references
+                    found_in_additional_root = infix in additional_infixes
 
                     tobj_rel_filepath = texture_raw_path.replace("//", "/")
 
@@ -314,7 +320,15 @@ def get_texture_path_from_material(material, texture_type, export_path):
                 return ""
 
     else:
-        if texture_raw_path:
+        if texture_raw_path and texture_raw_path.startswith("/"):
+            # texture not available locally (e.g. a base game texture that wasn't extracted): keep the game path,
+            # the game resolves it at runtime. Only TOBJ creation is impossible without the file.
+            game_path = "/" + texture_raw_path.lstrip("/")
+            lprint("W Texture %r from material %r isn't inside Project Base Path or Additional Data Folders.\n\t   " +
+                   "Keeping the path as game reference; make sure the game or your mod provides it.",
+                   (game_path, material.name))
+            return game_path.replace("\\", "/")
+        elif texture_raw_path:
             lprint("E Texture file %r from material %r doesn't exists inside current Project Base Path.\n\t   " +
                "TOBJ won't be exported and reference will remain empty, expect problems!",
                (texture_raw_path, material.name))
@@ -325,7 +339,10 @@ def get_texture_path_from_material(material, texture_type, export_path):
         return ""
 
     # CREATE TOBJ FILE
-    if not os.path.isfile(tobj_abs_filepath):  # only if it does not exists yet
+    if not os.path.isfile(tobj_abs_filepath) and found_in_additional_root:
+        lprint("W Texture %r from material %r was found only in Additional Data Folders without TOBJ,\n\t   " +
+               "TOBJ won't be created there. Make sure the game has it.", (texture_raw_path, material.name))
+    elif not os.path.isfile(tobj_abs_filepath):  # only if it does not exists yet
 
         # export tobj only if file of texture exists
         if os.path.isfile(texture_abs_filepath):
@@ -540,10 +557,16 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                     value = value[0]
 
                             else:
-                                value = getattr(material.scs_props, "shader_attribute_" + tag_prop, "NO TAG")
+                                value = _mat_attrs.get_attribute_value(material, tag_prop, None)
+
+                            if value is None:
+                                lprint("W Material %r: attribute %r has no value, skipping it on export.", (material.name, tag_prop))
+                                continue
 
                             if format_prop not in ("FLOAT", "INT", "INT2", "STRING"):
                                 value = tuple(value)
+                            elif format_prop in ("FLOAT", "INT") and isinstance(value, (list, tuple)):
+                                value = value[0]
 
                             # print('         > FINAL: %r - %r - %r' % (format_prop, tag_prop, value))
 
@@ -559,6 +582,15 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                             # print('         tobj_rel_path: %r' % str(tobj_rel_path))
 
                             sampler_sections.append((tag_prop, tobj_rel_path))
+
+                    # attributes kept outside of the preset on import (newer material format)
+                    for extra_format, extra_tag, extra_values in _mat_attrs.get_extra_attributes(material):
+                        if extra_format in ("FLOAT", "INT"):
+                            input_sections.append((extra_format, extra_tag, extra_values[0]))
+                        elif extra_format == "STRING":
+                            input_sections.append((extra_format, extra_tag, str(extra_values[0])))
+                        else:
+                            input_sections.append((extra_format, extra_tag, tuple(extra_values)))
 
                     #######################################
                     ##### TEMPORARY CONVERSION STARTS #####
@@ -684,7 +716,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                     for aux_prop in aux_props:
                                         value.append(aux_prop.value)
                                 else:
-                                    value = getattr(material.scs_props, "shader_attribute_" + tag_prop, None)
+                                    value = _mat_attrs.get_attribute_value(material, tag_prop, None)
 
                                 # print('         value: %r' % str(value))
 

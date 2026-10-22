@@ -28,6 +28,7 @@ from io_scs_tools.internals import shader_presets as _shader_presets
 from io_scs_tools.internals.structure import SectionData as _SectionData
 from io_scs_tools.internals.containers import pix as _pix_container
 from io_scs_tools.utils import path as _path_utils
+from io_scs_tools.utils import mat_attrs as _mat_attrs
 from io_scs_tools.utils import get_scs_globals as _get_scs_globals
 from io_scs_tools.utils.info import get_combined_ver_str
 from io_scs_tools.utils.printout import lprint
@@ -155,6 +156,7 @@ def get_texture_path_from_material(material, texture_type, export_path):
     # CALCULATING TOBJ AND TEXTURE PATHS
     texture_raw_path = getattr(material.scs_props, "shader_" + texture_type, "NO PATH")
     tobj_rel_filepath = tobj_abs_filepath = texture_abs_filepath = ""
+    found_in_additional_root = False
     scs_project_path = _get_scs_globals().scs_project_path.rstrip("\\").rstrip("/")
 
     extensions, texture_raw_path = _path_utils.get_texture_extens_and_strip_path(texture_raw_path)
@@ -164,11 +166,15 @@ def get_texture_path_from_material(material, texture_type, export_path):
 
             # search for relative path inside current scs project base and
             # possible dlc/mod parent folders; use first found
-            for infix in _path_utils.get_possible_project_infixes(include_zero_infix=True, append_sep=True):
+            additional_infixes = [root + os.sep for root in _path_utils.get_additional_data_roots()]
+            for infix in _path_utils.get_possible_project_infixes(include_zero_infix=True, append_sep=True) + additional_infixes:
 
                 curr_path = os.path.join(scs_project_path, infix + texture_raw_path[2:] + ext)
 
                 if os.path.isfile(curr_path):
+
+                    # never write TOBJs into additional data folders (game folder, mods), they are read-only references
+                    found_in_additional_root = infix in additional_infixes
 
                     tobj_rel_filepath = texture_raw_path.replace("//", "/")
 
@@ -237,7 +243,15 @@ def get_texture_path_from_material(material, texture_type, export_path):
                 return ""
 
     else:
-        if texture_raw_path:
+        if texture_raw_path and texture_raw_path.startswith("/"):
+            # texture not available locally (e.g. a base game texture that wasn't extracted): keep the game path,
+            # the game resolves it at runtime. Only TOBJ creation is impossible without the file.
+            game_path = "/" + texture_raw_path.lstrip("/")
+            lprint("W Texture %r from material %r isn't inside Project Base Path or Additional Data Folders.\n\t   " +
+                   "Keeping the path as game reference; make sure the game or your mod provides it.",
+                   (game_path, material.name))
+            return game_path.replace("\\", "/")
+        elif texture_raw_path:
             lprint("E Texture file %r from material %r doesn't exists inside current Project Base Path.\n\t   " +
                "TOBJ won't be exported and reference will remain empty, expect problems!",
                (texture_raw_path, material.name))
@@ -248,7 +262,10 @@ def get_texture_path_from_material(material, texture_type, export_path):
         return ""
 
     # CREATE TOBJ FILE
-    if not os.path.isfile(tobj_abs_filepath):  # only if it does not exists yet
+    if not os.path.isfile(tobj_abs_filepath) and found_in_additional_root:
+        lprint("W Texture %r from material %r was found only in Additional Data Folders without TOBJ,\n\t   " +
+               "TOBJ won't be created there. Make sure the game has it.", (texture_raw_path, material.name))
+    elif not os.path.isfile(tobj_abs_filepath):  # only if it does not exists yet
 
         # export tobj only if file of texture exists
         if os.path.isfile(texture_abs_filepath):
@@ -417,6 +434,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                 # PRESET SHADERS
                 flags = 0
                 attribute_cnt = texture_cnt = 0
+                new_format_skipped = []
                 attribute_sections = []
                 texture_sections = []
                 active_shader_preset_name = material.scs_props.active_shader_preset_name
@@ -465,6 +483,12 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         if item.type == "Attribute":
                             # print('     Attribute:')
 
+                            # attributes of the newer material format can't be written to the legacy one
+                            item_tag = item.get_prop_value("Tag")
+                            if item_tag and _mat_attrs.is_new_format_only(item_tag):
+                                new_format_skipped.append(item_tag)
+                                continue
+
                             attribute_data = _SectionData("Attribute")
                             for rec in item.props:
                                 # print('       rec: %r' % str(rec))
@@ -492,7 +516,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                             value = value[0]
 
                                     else:
-                                        value = getattr(material.scs_props, "shader_attribute_" + tag_prop, "NO TAG")
+                                        value = _mat_attrs.get_attribute_value(material, tag_prop, "NO TAG")
                                     # print('         value: %s' % str(value))
                                     if format_prop == 'FLOAT':
                                         attribute_data.props.append((rec[0], ["&&", (value,)]))
@@ -526,6 +550,28 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             texture_sections.append(texture_data)
                             texture_cnt += 1
+
+                    # attributes kept outside of the preset on import (newer material format)
+                    for extra_format, extra_tag, extra_values in _mat_attrs.get_extra_attributes(material):
+                        if _mat_attrs.is_new_format_only(extra_tag):
+                            new_format_skipped.append(extra_tag)
+                            continue
+                        attribute_data = _SectionData("Attribute")
+                        attribute_data.props.append(("Format", extra_format))
+                        attribute_data.props.append(("Tag", extra_tag))
+                        if extra_format == "FLOAT":
+                            attribute_data.props.append(("Value", ["&&", (extra_values[0],)]))
+                        elif extra_format == "INT":
+                            attribute_data.props.append(("Value", ["ii", (extra_values[0],)]))
+                        else:
+                            attribute_data.props.append(("Value", ["i", tuple(extra_values)]))
+                        attribute_sections.append(attribute_data)
+                        attribute_cnt += 1
+
+                    if new_format_skipped or ".heightmap" in effect_name:
+                        lprint("W Material %r uses newer material format features (%s) which the legacy material output "
+                               "can't carry. Use the AutoMat output format for this model.",
+                               (material.name, ", ".join(sorted(set(new_format_skipped))) or "heightmap flavor"))
 
                     material_export_data = _SectionData("Material")
                     material_export_data.props.append(("Alias", material.name))
@@ -569,8 +615,8 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                     for aux_prop in aux_props:
                                         value.append(aux_prop.value)
                                 else:
-                                    value = getattr(material.scs_props, "shader_attribute_" + tag_prop, None)
-                                    if isinstance(value, float):
+                                    value = _mat_attrs.get_attribute_value(material, tag_prop, None)
+                                    if isinstance(value, (float, int)):
                                         value = [value]
 
                                 if value is None:

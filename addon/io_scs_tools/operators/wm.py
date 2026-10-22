@@ -323,9 +323,23 @@ class SCS_TOOLS_OT_Show3DViewReport(bpy.types.Operator):
         # when operator get's cancelled, either user closed blender or window itself, in which our operator was handled.
         # Thus make sure to re-call on exisiting oldest main window, so that 3d view opearator "reopens"
         if oldest_main_window and SCS_TOOLS_OT_Show3DViewReport.__static_window_instance != oldest_main_window:
-            with bpy.context.temp_override(window=oldest_main_window):
-                bpy.ops.wm.scs_tools_show_3dview_report('INVOKE_DEFAULT', modal_handler_reassign=True)
-            _view3d_utils.tag_redraw_all_view3d()
+
+            # NOTE: don't re-invoke directly from cancel(). cancel() is called by Blender while it is removing
+            # the closing window's event handlers; adding a new modal handler at that moment crashes Blender 5.x
+            # (EXCEPTION_ACCESS_VIOLATION in WM_event_remove_handlers/wm_window_close). Defer it to a one-shot timer.
+            def _deferred_reassign():
+                wm = bpy.context.window_manager
+                if not wm:
+                    return None
+                for window in wm.windows:
+                    if not window.parent:
+                        with bpy.context.temp_override(window=window, screen=window.screen):
+                            bpy.ops.wm.scs_tools_show_3dview_report('INVOKE_DEFAULT', modal_handler_reassign=True)
+                        _view3d_utils.tag_redraw_all_view3d()
+                        break
+                return None  # run once
+
+            bpy.app.timers.register(_deferred_reassign, first_interval=0.1)
         else:
             SCS_TOOLS_OT_Show3DViewReport.discard_drawing_data()
 

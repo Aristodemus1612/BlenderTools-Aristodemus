@@ -884,6 +884,13 @@ Shader {
         Value: ( 0 )
         RequiredFlavors: ( "DEPTH" )
     }
+    Attribute {
+        Format: INT
+        Tag: "is_dynamic_road"
+        FriendlyTag: "Is dynamic road (UN road lines)"
+        Value: ( 0 )
+        RequiredFlavors: ( "DEPTH" )
+    }
     Texture {
         Tag: "texture[X]:texture_base"
         Value: ""
@@ -4921,30 +4928,13 @@ Flavor {
     Name: "flipsheet"
 }
 
-# NOTE: This flavor is supported by shaders, but not supported by conversion tool for now. Commented to not display it in Blender.
-#       Do not use it in old (currently used in BT) 1.47 material format. It will cause errors in conversion tool.
-# Flavor {
-#     Type: "HMAP"
-#     Name: "heightmap"
-#
-# ######## EXAMPLES FOR OLD FORMAT (not working) ########
-#     # NOTE: Remove it when new format will be supported by BT.
-#             Can't say in which order aux[7/8] values should be set now (there is no any shader in older material format using this flavor).
-#             Can't also test it in conversion tool due to errors.
-#     Attribute {
-#         Format: FLOAT4
-#         Tag: "aux[7]"
-#         FriendlyTag: "Heightmap (Feather size, Height range, Shape type)"
-#         Value: ( 0.01 -1.0 1.0 0.0 )
-#     }
-#     # NOTE: For case of "secondary" hmap
-#     Attribute {
-#         Format: FLOAT4
-#         Tag: "aux[8]"
-#         FriendlyTag: "Heightmap2 (Feather size, Height range, Shape type)"
-#         Value: ( 0.01 -1.0 1.0 0.0 )
-#     }
-# }
+# NOTE: Heightmap flavor. Supported by the game and by the AutoMat (1.47+) material output ("5_AM").
+#       The legacy material output ("5") can't carry it: the exporter warns and the conversion tool
+#       must be fed the AutoMat output for heightmap materials.
+Flavor {
+    Type: "HMAP"
+    Name: "heightmap"
+}
 
 Flavor {
     Type: "INDENV"

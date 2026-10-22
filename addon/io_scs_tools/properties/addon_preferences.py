@@ -356,6 +356,55 @@ class SCSGlobals(bpy.types.PropertyGroup):
         _config_container.update_scs_project_path(self.scs_project_path, reload_only=True)
         return None
 
+    def additional_data_paths_update(self, context):
+
+        _config_container.update_item_in_file('Paths.AdditionalDataPaths', self.additional_data_paths)
+
+        # libraries might be found in additional folders too, so reload them
+        _config_container.update_scs_project_path(self.scs_project_path, reload_only=True)
+
+        # re-resolve textures of already imported/created materials
+        if not self.config_update_lock:
+            _material_utils.refresh_scs_material_textures()
+        return None
+
+    def un_lines_country_update(self, context):
+
+        _config_container.update_item_in_file('Paths.UNLinesCountry', self.un_lines_country)
+
+        if not self.config_update_lock:
+            _material_utils.refresh_scs_material_textures(only_un_road=True)
+        return None
+
+    def get_un_lines_country_items(self, context):
+        items = []
+        for i, iso in enumerate(_path_utils.get_un_lines_countries()):
+            label = _path_utils.get_un_lines_country_label(iso)
+            items.append((iso, label, "Show road line textures from road_template/un/%s/ in the viewport" % iso, i))
+
+        # keep currently selected value even if it isn't found anymore, so enum stays valid
+        current = (self.un_lines_country or "default").lower()
+        if current not in [item[0] for item in items]:
+            items.append((current, current.upper() + " (not found)", "Country folder not found in any data folder", len(items)))
+
+        # keep reference to items, otherwise Blender might show garbage strings
+        SCSGlobals._un_lines_country_items_cache = items
+        return items
+
+    def get_un_lines_country_enum(self):
+        current = (self.un_lines_country or "default").lower()
+        for item in getattr(SCSGlobals, "_un_lines_country_items_cache", None) or self.get_un_lines_country_items(None):
+            if item[0] == current:
+                return item[3]
+        return 0
+
+    def set_un_lines_country_enum(self, value):
+        items = getattr(SCSGlobals, "_un_lines_country_items_cache", None) or self.get_un_lines_country_items(None)
+        for item in items:
+            if item[3] == value:
+                self.un_lines_country = item[0]
+                return
+
     def shader_presets_filepath_update(self, context):
         shader_presets_path = self.shader_presets_filepath if self.shader_presets_use_custom else _path_utils.get_shader_presets_filepath()
         _config_container.update_shader_presets_path(shader_presets_path)
@@ -448,6 +497,40 @@ class SCSGlobals(bpy.types.PropertyGroup):
                     "that you don't want to pack with your mod, but still use in SCS Blender Tools.\n",
         default=True,
         update=use_alternative_bases_update,
+    )
+    additional_data_paths: StringProperty(
+        name="Additional Data Folders",
+        description="Extra folders searched for textures, TOBJs and libraries when they are not found inside SCS Project Base Path "
+                    "(or its alternative bases). Separate multiple folders with ';'.\n\n"
+                    "Use folders whose content starts at the game root, e.g.:\n"
+                    "- 'E:/SteamLibrary/steamapps/common/Euro Truck Simulator 2'\n"
+                    "- 'D:/scsextracted/base_map'\n"
+                    "- 'D:/mods/my_mod'\n\n"
+                    "Pointing directly at a 'road_template' or 'road_template/un' folder also works.\n"
+                    "Earlier folders win.",
+        default="",
+        subtype='NONE',
+        update=additional_data_paths_update
+    )
+    un_lines_country: StringProperty(
+        name="UN Lines Preview Country",
+        description="Country folder under 'road_template/un/' used for previewing UN road line textures (viewport only)",
+        default="default",
+        options={'HIDDEN'},
+        update=un_lines_country_update
+    )
+    un_lines_country_enum: EnumProperty(
+        name="Road Line Country",
+        description="Which country's road line textures to show on universal (UN) road lines in the viewport.\n"
+                    "The game swaps the magenta 'default' line textures for the country's own at runtime "
+                    "(materials with 'Is dynamic road' = 1); this lets you see that result in Blender.\n"
+                    "Lists folders under 'road_template/un/' that contain line textures (lines_*.tobj/.dds).\n"
+                    "Viewport only: exported materials keep 'road_template/un/default/' paths.\n"
+                    "Files a country folder doesn't have fall back to default",
+        items=get_un_lines_country_items,
+        get=get_un_lines_country_enum,
+        set=set_un_lines_country_enum,
+        options={'SKIP_SAVE'},
     )
     shader_presets_filepath: StringProperty(
         name="Shader Presets Library",

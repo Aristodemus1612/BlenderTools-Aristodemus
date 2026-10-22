@@ -29,8 +29,19 @@ from io_scs_tools.internals import inventory as _invetory
 from io_scs_tools.internals import shader_presets as _shader_presets
 from io_scs_tools.internals.shaders import shader as _shader
 from io_scs_tools.utils import path as _path
+from io_scs_tools.utils import mat_attrs as _mat_attrs
 from io_scs_tools.utils.printout import lprint
 
+
+
+def _unset_scs_prop(scs_props, name):
+    """Unset SCS material property; plain ID properties (no RNA definition, e.g. heightmap_* attributes)
+    can't be unset with property_unset() in Blender 5, so delete them directly."""
+    try:
+        scs_props.property_unset(name)
+    except TypeError:
+        if name in scs_props.keys():
+            del scs_props[name]
 
 def get_texture_image(texture_path, texture_type, report_invalid=False):
     """Creates and returns image for given texture path and type.
@@ -48,6 +59,9 @@ def get_texture_image(texture_path, texture_type, report_invalid=False):
     # get reflection image texture
     if texture_path.endswith(".tobj") and texture_type == "reflection":
         return get_reflection_image(texture_path, report_invalid=report_invalid)
+
+    # UN road lines country preview: remap "road_template/un/default/" to selected country folder (viewport only)
+    texture_path = _path.get_un_country_texture_path(texture_path)
 
     # CREATE TEXTURE/IMAGE ID NAME
     teximag_id_name = _path.get_filename(texture_path, with_ext=False)
@@ -518,7 +532,7 @@ def set_shader_data_to_material(material, section, is_import=False, override_bac
             # as those keys might be used in some other way
             if not is_key_used and key.startswith("shader_"):
                 lprint("D Unsetting property from material in set_shader_data %s:", (key,))
-                material.scs_props.property_unset(key)
+                _unset_scs_prop(material.scs_props, key)
 
     # apply used attributes
     created_attributes = {}
@@ -537,10 +551,18 @@ def set_shader_data_to_material(material, section, is_import=False, override_bac
 
             created_attributes[attribute_type] = material.scs_props["shader_attribute_" + attribute_type]
 
-        elif attribute_type in ("shininess", "add_ambient", "reflection", "reflection2", "shadow_bias", "tint_opacity", "queue_bias"):
+        elif attribute_type in ("shininess", "add_ambient", "reflection", "reflection2", "shadow_bias", "tint_opacity", "queue_bias", "is_dynamic_road"):
 
             if not old_value:
-                material.scs_props["shader_attribute_" + attribute_type] = attribute_data['Value'][0]
+                new_value = attribute_data['Value'][0]
+                # integer properties: imported data (e.g. ConverterPIX) can store them as floats ("1.0"),
+                # which would otherwise be stored as float ID property and read back as default value
+                if attribute_type in ("queue_bias", "is_dynamic_road"):
+                    try:
+                        new_value = int(round(float(new_value)))
+                    except (TypeError, ValueError):
+                        new_value = 0
+                material.scs_props["shader_attribute_" + attribute_type] = new_value
 
             created_attributes[attribute_type] = material.scs_props["shader_attribute_" + attribute_type]
 
@@ -572,6 +594,18 @@ def set_shader_data_to_material(material, section, is_import=False, override_bac
 
             if not old_value:
                 material.scs_props.substance = attribute_data['Value'][0]
+
+        elif not hasattr(material.scs_props, "shader_attribute_" + attribute_type):
+
+            # attribute defined by the preset but without dedicated Blender property (e.g. heightmap_*):
+            # keep it as ID property so it survives import -> export
+            stored_old = _mat_attrs.get_attribute_value(material, attribute_type) if not is_import else None
+            if stored_old is None:
+                values = attribute_data['Value']
+                attr_format = attribute_data.get('Format', "FLOAT") if hasattr(attribute_data, "get") else "FLOAT"
+                _mat_attrs.store_attribute_value(material, attribute_type, attr_format, values)
+
+            created_attributes[attribute_type] = _mat_attrs.get_attribute_value(material, attribute_type)
 
     # if shader attribute properties are still unset reset it to default
     if material.scs_props.substance == _MAT_consts.unset_substance and "substance" not in material.scs_props.keys():
@@ -937,3 +971,43 @@ def has_valid_color_management(scene):
             is_proper_gamma
     )
     return valid_color_management
+
+
+def refresh_scs_material_textures(only_un_road=False):
+    """Re-resolves and re-assigns texture images on all SCS materials in blend file.
+    Used when additional data folders or UN road lines preview country changes.
+
+    :param only_un_road: refresh only textures coming from "road_template/un/"
+    :type only_un_road: bool
+    :return: number of refreshed texture slots
+    :rtype: int
+    """
+    refreshed = 0
+    for material in bpy.data.materials:
+
+        if not hasattr(material, "scs_props") or material.scs_props.active_shader_preset_name == "<none>":
+            continue
+
+        try:
+            tex_types = list(material.scs_props.get_texture_types())
+        except Exception:
+            continue
+
+        for tex_type in tex_types:
+            tex_str = getattr(material.scs_props, "shader_texture_" + tex_type, "")
+            if not tex_str:
+                continue
+
+            if only_un_road and "road_template/un/" not in tex_str.replace("\\", "/").lower():
+                continue
+
+            try:
+                image = get_texture_image(tex_str, tex_type)
+                if image is None:
+                    continue
+                _shader.set_texture(material, tex_type, image)
+                refreshed += 1
+            except Exception as e:
+                lprint("W Couldn't refresh texture %r on material %r: %s", (tex_str, material.name, e))
+
+    return refreshed

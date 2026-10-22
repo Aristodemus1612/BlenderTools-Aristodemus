@@ -19,14 +19,13 @@
 # Copyright (C) 2013-2021: SCS Software
 
 bl_info = {
-    "name": "SCS Tools",
-    "description": "Setup models, Import-Export SCS data format",
-    "author": "Simon Lusenc (50keda), Milos Zajic (4museman), Michal (Michaleczeq)",
-    "version": (2, 4, "aeadde03", 9),
+    "name": "SCS Tools (Aristodemus)",
+    "description": "Setup models, Import-Export SCS data format. Unofficial update for ETS2 / ATS 1.61 (test release)",
+    "author": "Simon Lusenc (50keda), Milos Zajic (4museman), Michal (Michaleczeq), Aristodemus",
+    "version": (2, 5, "0a"),
     "blender": (5, 0, 0),
     "location": "File > Import-Export",
     "doc_url": "http://modding.scssoft.com/wiki/Documentation/Tools/SCS_Blender_Tools",
-    "tracker_url": "http://forum.scssoft.com/viewforum.php?f=163",
     "support": "COMMUNITY",
     "category": "Import-Export"}
 
@@ -81,13 +80,14 @@ class SCS_TOOLS_OT_Import(bpy.types.Operator, ImportHelper):
 
         from .internals.containers.config import AsyncPathsInit
 
-        # if paths are still initializing report that to user and don't execute import
+        # if paths are still initializing (e.g. first import after start-up, or project path changed inside this
+        # dialog), finish the initialization right now instead of re-opening the file browser: re-invoking
+        # fileselect from execute left a file browser without "Import"/"Cancel" buttons in Blender 5
         if AsyncPathsInit.is_running():
-
-            self.report({'INFO'}, "Can't import yet, paths initialization is still in progress! Try again in few moments.")
-
-            # revoke to add new fileselect dialog otherwise this operator will finish
-            return self.invoke(context, None)
+            lprint("I Finishing paths initialization before import...")
+            for _ in range(1000):
+                if AsyncPathsInit._process_paths() is None:
+                    break
 
         if not _has_view3d_space(context.screen):
             message = "Cannot import SCS Models, no 3D viewport found! Make sure you have at least one 3D view visible."

@@ -137,7 +137,38 @@ def get_possible_project_infixes(include_zero_infix=False, append_sep=False):
     return infixes
 
 
-def get_abs_path(path_in, subdir_path='', is_dir=False, skip_mod_check=False):
+def get_additional_data_roots():
+    """Gets list of existing additional data roots (game folder, extracted archives, mod folders...)
+    set by user in "Additional Data Folders". They are searched after SCS Project Base Path
+    and its alternative bases, in the given order.
+
+    If user points directly to a "road_template" or "road_template/un" folder, the root is
+    corrected to the folder containing "road_template", so relative paths resolve properly.
+
+    :return: list of absolute directory paths
+    :rtype: list[str]
+    """
+    raw = getattr(_get_scs_globals(), "additional_data_paths", "") or ""
+    roots = []
+    for entry in raw.replace("\n", ";").replace("|", ";").split(";"):
+        entry = entry.strip().strip('"').rstrip("\\/")
+        if not entry:
+            continue
+
+        entry = os.path.expanduser(entry)
+        norm_parts = entry.replace("\\", "/").lower().split("/")
+        if norm_parts[-2:] == ["road_template", "un"]:
+            entry = os.path.dirname(os.path.dirname(entry))
+        elif norm_parts[-1:] == ["road_template"]:
+            entry = os.path.dirname(entry)
+
+        if os.path.isdir(entry) and entry not in roots:
+            roots.append(entry)
+
+    return roots
+
+
+def get_abs_path(path_in, subdir_path='', is_dir=False, skip_mod_check=False, skip_additional_roots=False):
     """Gets absolute path to the "SCS Project Base Path" if given path is relative (starts with: "//"),
     otherwise original path is returned.
     If relative path is existing and valid, it returns the absolute path, otherwise None.
@@ -156,6 +187,9 @@ def get_abs_path(path_in, subdir_path='', is_dir=False, skip_mod_check=False):
     :return: Absolute path or None
     :rtype: str
     """
+
+    # additional data roots are searched only if caller didn't explicitly request no fallback search
+    skip_additional_roots |= skip_mod_check
 
     # correct skip mod check switch if usage of alternative bases is switched off by user
     skip_mod_check |= not _get_scs_globals().use_alternative_bases
@@ -177,7 +211,16 @@ def get_abs_path(path_in, subdir_path='', is_dir=False, skip_mod_check=False):
     existance_check = os.path.isdir if is_dir else os.path.isfile
 
     while infixes and result is not None and not existance_check(result) and not skip_mod_check:
-        result = get_abs_path(path_in, subdir_path=infixes.pop(0), is_dir=is_dir, skip_mod_check=True)
+        result = get_abs_path(path_in, subdir_path=infixes.pop(0), is_dir=is_dir, skip_mod_check=True, skip_additional_roots=True)
+
+    # finally search additional data roots (game folder, mods...), but only for relative paths
+    # and only from top level call, so we don't search them for each alternative base
+    if (not skip_additional_roots and subdir_path == '' and path_in.startswith("//")
+            and (result is None or not existance_check(result))):
+        for extra_root in get_additional_data_roots():
+            candidate = os.path.join(extra_root, path_in[2:])
+            if existance_check(candidate):
+                return candidate
 
     return result
 
@@ -206,9 +249,9 @@ def get_abs_paths(filepath, is_dir=False, include_nonexist_alternative_bases=Fal
 
     existance_check = os.path.isdir if is_dir else os.path.isfile
 
-    for sub_dir in get_possible_project_infixes(include_zero_infix=True):
+    for sub_dir in get_possible_project_infixes(include_zero_infix=True) + get_additional_data_roots():
 
-        infixed_abs_path = get_abs_path(filepath, subdir_path=sub_dir, is_dir=is_dir, skip_mod_check=True)
+        infixed_abs_path = get_abs_path(filepath, subdir_path=sub_dir, is_dir=is_dir, skip_mod_check=True, skip_additional_roots=True)
 
         # additionally search for infixed files (eg. sign.dlc_north.sii)
         if use_infixed_search:
@@ -928,3 +971,96 @@ def get_tree_size(src):
             total += entry.stat(follow_symlinks=False).st_size
 
     return total
+
+
+UN_LINES_DEFAULT_COUNTRY = "default"
+_UN_LINES_DIR = ("road_template", "un")
+
+
+# ISO 3166-1 alpha-3 codes used by SCS for road line country folders -> readable names
+UN_LINES_COUNTRY_NAMES = {
+    "alb": "Albania", "and": "Andorra", "aut": "Austria", "bel": "Belgium", "bgr": "Bulgaria", "bih": "Bosnia and Herzegovina",
+    "blr": "Belarus", "che": "Switzerland", "cze": "Czechia", "deu": "Germany", "dnk": "Denmark", "esp": "Spain",
+    "est": "Estonia", "fin": "Finland", "fra": "France", "gbr": "United Kingdom", "grc": "Greece", "hrv": "Croatia",
+    "hun": "Hungary", "irl": "Ireland", "isl": "Iceland", "ita": "Italy", "lie": "Liechtenstein", "ltu": "Lithuania",
+    "lux": "Luxembourg", "lva": "Latvia", "mkd": "North Macedonia", "mne": "Montenegro", "nld": "Netherlands",
+    "nor": "Norway", "pol": "Poland", "prt": "Portugal", "rou": "Romania", "rus": "Russia", "srb": "Serbia",
+    "svk": "Slovakia", "svn": "Slovenia", "swe": "Sweden", "tur": "Turkey", "ukr": "Ukraine", "kos": "Kosovo",
+}
+
+# files that mark a folder as a road line texture set (lines_local_difopa, lines_hw_difopa, lines_special_difopa, ...)
+_UN_LINES_FILE_PREFIX = "lines_"
+_UN_LINES_FILE_EXTS = (".tobj", ".dds", ".png", ".tga")
+
+
+def _is_un_lines_folder(folder):
+    """Tells if given folder holds road line textures (lines_*.tobj/.dds), e.g. 'road_template/un/nor'.
+    Other folders under 'road_template/un/' (road_edges, decal, ...) are not line sets."""
+    try:
+        for name in os.listdir(folder):
+            lower = name.lower()
+            if lower.startswith(_UN_LINES_FILE_PREFIX) and lower.endswith(_UN_LINES_FILE_EXTS):
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def get_un_lines_country_label(iso):
+    """Readable label for a road line country folder, e.g. 'NOR - Norway'."""
+    if iso == UN_LINES_DEFAULT_COUNTRY:
+        return "Default (game placeholder, magenta)"
+    name = UN_LINES_COUNTRY_NAMES.get(iso.lower())
+    return "%s - %s" % (iso.upper(), name) if name else iso.upper()
+
+
+def get_un_lines_countries():
+    """Scans SCS Project Base Path, its alternative bases and additional data roots for
+    "road_template/un/<iso>" folders holding road line textures and returns their sorted names.
+    Folders without line textures (road_edges, decal, ...) are left out.
+
+    :return: sorted list of country folder names, "default" always first
+    :rtype: list[str]
+    """
+    countries = set()
+    for un_dir in get_abs_paths("//" + "/".join(_UN_LINES_DIR), is_dir=True):
+        try:
+            for entry in os.listdir(un_dir):
+                full = os.path.join(un_dir, entry)
+                if os.path.isdir(full) and _is_un_lines_folder(full):
+                    countries.add(entry.lower())
+        except OSError:
+            continue
+
+    countries.discard(UN_LINES_DEFAULT_COUNTRY)
+    return [UN_LINES_DEFAULT_COUNTRY] + sorted(countries)
+
+
+def get_un_country_texture_path(texture_path):
+    """Remaps UN road lines texture path from "road_template/un/default/" to currently
+    selected preview country "road_template/un/<iso>/", if such file exists in any data root.
+    This is used only for viewport preview, exported paths are never changed.
+
+    :param texture_path: shader texture path, eg. "//road_template/un/default/lines_local_difopa.tobj"
+    :type texture_path: str
+    :return: remapped texture path or original one if country isn't selected or file doesn't exist
+    :rtype: str
+    """
+    country = getattr(_get_scs_globals(), "un_lines_country", UN_LINES_DEFAULT_COUNTRY) or UN_LINES_DEFAULT_COUNTRY
+    country = country.lower()
+    if country == UN_LINES_DEFAULT_COUNTRY or not texture_path:
+        return texture_path
+
+    norm = texture_path.replace("\\", "/")
+    prefix = "/" if norm.startswith("/") and not norm.startswith("//") else "//"
+    stripped = norm.lstrip("/")
+    marker = "road_template/un/default/"
+    if not stripped.lower().startswith(marker):
+        return texture_path
+
+    candidate = "//road_template/un/" + country + "/" + stripped[len(marker):]
+    abs_candidate = get_abs_path(candidate)
+    if abs_candidate and os.path.isfile(abs_candidate):
+        return candidate if prefix == "//" else candidate[1:]
+
+    return texture_path

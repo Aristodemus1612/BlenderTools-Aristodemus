@@ -143,7 +143,7 @@ def get_children(obj, children=[], reset=True):
         children = []
     for child in obj.children:
         # filter out multilevel scs roots
-        isnt_root = not (child.scs_props.empty_object_type == "SCS Root" and child.type == 'EMPTY')
+        isnt_root = not (child.scs_props.empty_object_type == "SCS_Root" and child.type == 'EMPTY')
         isnt_preview_model = not (child.type == "MESH" and child.data and "scs_props" in child.data and
                                   child.data.scs_props.locator_preview_model_path != "")
         if isnt_root and isnt_preview_model and child not in children:
@@ -1136,3 +1136,151 @@ def select_set(obj, state, view_layer=None):
             return True
 
     return False
+
+
+def get_objects_of_scs_root(scs_root):
+    """Gets all objects belonging to given SCS Root: hierarchy children plus any object whose SCS Root resolves to it.
+
+    :rtype: list[bpy.types.Object]
+    """
+    objs = list(get_children(scs_root))
+    seen = {o.name for o in objs}
+    for obj in bpy.data.objects:
+        if obj.name not in seen and obj != scs_root and get_scs_root(obj) == scs_root:
+            objs.append(obj)
+            seen.add(obj.name)
+    return objs
+
+
+def apply_variant_visibility(scs_root, variant_index):
+    """Hides all objects of the SCS Root which don't belong to parts of given variant; None shows everything.
+    Visibility is set on every view layer the object is in and all 3D views are redrawn.
+
+    :return: tuple (shown objects, hidden objects)
+    :rtype: tuple[list[str], list[str]]
+    """
+    inventory = scs_root.scs_object_variant_inventory
+    if variant_index is not None and 0 <= variant_index < len(inventory):
+        parts = {part.name.lower() for part in inventory[variant_index].parts if part.include}
+        extra = getattr(scs_root.scs_props, "scs_root_preview_extra_parts", "") or ""
+        parts |= {p.strip().lower() for p in extra.split(";") if p.strip()}
+    else:
+        parts = None
+
+    shown, hidden = [], []
+    for obj in get_objects_of_scs_root(scs_root):
+
+        # only geometry carries parts; keep locators/empties as they are
+        if obj.type not in ('MESH', 'CURVE', 'SURFACE', 'META', 'FONT'):
+            continue
+
+        hide = parts is not None and obj.scs_props.scs_part.lower() not in parts
+
+        for scene in bpy.data.scenes:
+            for view_layer in scene.view_layers:
+                if obj.name in view_layer.objects:
+                    obj.hide_set(hide, view_layer=view_layer)
+
+        (hidden if hide else shown).append(obj.name)
+
+    # make sure viewports pick up the change immediately
+    try:
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                area.tag_redraw()
+        bpy.context.view_layer.update()
+    except Exception:
+        pass
+
+    return shown, hidden
+
+
+def _geometry_objects_of_scs_root(scs_root):
+    return [o for o in get_objects_of_scs_root(scs_root) if o.type in ('MESH', 'CURVE', 'SURFACE', 'META', 'FONT')]
+
+
+def get_hidden_objects_of_scs_root(scs_root):
+    """Names of geometry objects of the SCS Root currently hidden in the active view layer."""
+    view_layer = bpy.context.view_layer
+    hidden = []
+    for obj in _geometry_objects_of_scs_root(scs_root):
+        if obj.name in view_layer.objects and obj.hide_get(view_layer=view_layer):
+            hidden.append(obj.name)
+    return hidden
+
+
+def restore_hidden_objects_of_scs_root(scs_root, hidden_names):
+    """Hide exactly the given geometry objects of the SCS Root (every view layer), show the rest."""
+    hidden_names = set(hidden_names)
+    for obj in _geometry_objects_of_scs_root(scs_root):
+        hide = obj.name in hidden_names
+        for scene in bpy.data.scenes:
+            for view_layer in scene.view_layers:
+                if obj.name in view_layer.objects:
+                    obj.hide_set(hide, view_layer=view_layer)
+    try:
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                area.tag_redraw()
+        bpy.context.view_layer.update()
+    except Exception:
+        pass
+
+
+def build_variant_log(scs_root):
+    """Builds text log of variants, parts and objects of given SCS Root.
+
+    :rtype: str
+    """
+    lines = []
+    inventory = scs_root.scs_object_variant_inventory
+    objs = get_objects_of_scs_root(scs_root)
+    view_layer = bpy.context.view_layer
+
+    by_part = {}
+    for obj in objs:
+        if obj.type == 'MESH':
+            by_part.setdefault(obj.scs_props.scs_part, []).append(obj)
+
+    def obj_state(o):
+        in_vl = o.name in view_layer.objects
+        vis = in_vl and not o.hide_get() and not o.hide_viewport
+        mats = ",".join(m.name for m in o.data.materials if m) if o.data else ""
+        return "%s [%s%s] mat=%s" % (o.name, "visible" if vis else "HIDDEN", "" if in_vl else ", NOT IN VIEW LAYER", mats)
+
+    lines.append("SCS Root: %s   active variant: %s   preview: %s" % (
+        scs_root.name,
+        inventory[scs_root.scs_props.active_scs_variant].name if 0 <= scs_root.scs_props.active_scs_variant < len(inventory) else "-",
+        scs_root.scs_props.scs_root_variant_preview))
+    lines.append("")
+    lines.append("== VARIANTS ==")
+    for i, variant in enumerate(inventory):
+        inc = [p.name for p in variant.parts if p.include]
+        lines.append("%2d %-14s parts: %s" % (i, variant.name, " ".join(inc)))
+    lines.append("")
+    lines.append("== PARTS -> OBJECTS ==")
+    used = {p.name for v in inventory for p in v.parts if p.include}
+    for part in sorted(by_part):
+        tag = "" if part in used else "   (in no variant)"
+        lines.append("%-10s%s" % (part, tag))
+        for o in by_part[part]:
+            lines.append("    " + obj_state(o))
+    lines.append("")
+    others = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o not in objs]
+    lines.append("== MESH OBJECTS NOT UNDER THIS SCS ROOT (%d) ==" % len(others))
+    for o in others[:200]:
+        root = get_scs_root(o)
+        lines.append("    %s part=%s root=%s %s" % (o.name, o.scs_props.scs_part, root.name if root else None,
+                                                  "visible" if (o.name in view_layer.objects and not o.hide_get()) else "hidden"))
+    return "\n".join(lines)
+
+
+def get_parts_in_no_variant(scs_root):
+    """Gets sorted names of parts used by objects of given SCS Root which no variant includes
+    (road look additional parts such as edge lines and rumble strips, and overlay parts).
+
+    :rtype: list[str]
+    """
+    used = {p.name for v in scs_root.scs_object_variant_inventory for p in v.parts if p.include}
+    found = {o.scs_props.scs_part for o in get_objects_of_scs_root(scs_root) if o.type == 'MESH'}
+    return sorted(found - used)

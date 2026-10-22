@@ -929,17 +929,16 @@ class SCS_TOOLS_PT_Variants(_ObjectPanelBlDefs, Panel):
         col = box.column(align=True)
         SCS_TOOLS_PT_Variants.draw_part_list_for_variant(col, workspace, variant)
 
-    def draw_header_preset(self, context):
-        layout = self.layout
-        workspace = context.workspace
-        layout.prop(workspace.scs_props, 'variant_views', text="", expand=True, toggle=True, emboss=True)
-
     def draw(self, context):
         layout = self.get_layout()
         workspace = context.workspace
         scs_root = context.active_object
 
-        variant_inventory = scs_root.scs_object_variant_inventory
+        # VARIANT PREVIEW TOGGLE + RESET + LOG
+        row = layout.row(align=True)
+        row.prop(scs_root.scs_props, 'scs_root_variant_preview', icon='HIDE_OFF', toggle=True)
+        row.operator('object.scs_tools_reset_variant_preview', text="Reset View", icon='LOOP_BACK')
+        row.operator('object.scs_tools_log_variants', text="", icon='TEXT')
 
         # VARIANT LIST
         row = layout.row()
@@ -956,11 +955,6 @@ class SCS_TOOLS_PT_Variants(_ObjectPanelBlDefs, Panel):
             type='DEFAULT'
         )
 
-        if workspace.scs_props.variant_views == 'integrated':
-
-            # VARIANT TOOLS FOR INTEGRATED LIST
-            self.draw_icon_variant_tools_line(col, scs_root.scs_props.active_scs_variant)
-
         # LIST BUTTONS
         col = row.column(align=True)
         col.operator('object.scs_tools_add_variant', text="", icon='ADD')
@@ -968,62 +962,85 @@ class SCS_TOOLS_PT_Variants(_ObjectPanelBlDefs, Panel):
         col.operator('object.scs_tools_move_active_variant', text="", icon='TRIA_UP').move_direction = _OP_consts.InventoryMoveType.move_up
         col.operator('object.scs_tools_move_active_variant', text="", icon='TRIA_DOWN').move_direction = _OP_consts.InventoryMoveType.move_down
 
-        # VARIANT-PART LIST
-        if len(variant_inventory) > 0:
 
-            # VARIANT-PART LIST HEADER
-            if workspace.scs_props.variant_views != 'integrated':
+class _VariantsSubPanelBlDefs(_ObjectPanelBlDefs):
+    bl_parent_id = SCS_TOOLS_PT_Variants.__name__
+    bl_context = "object"
+    bl_options = {'DEFAULT_CLOSED'}
 
-                col = layout.column()
-                split = col.split(factor=0.5)
-                split1 = split.row()
+    @classmethod
+    def poll(cls, context):
+        return SCS_TOOLS_PT_Variants.poll(context)
 
-                split1.label(text="Variant-Part Table:", icon='MESH_GRID')
-                split2 = split.row(align=True)
-                split2.alignment = 'RIGHT'
-                split2.prop(workspace.scs_props, 'part_list_sorted', text='Parts', icon='SORTALPHA', expand=True, toggle=True)
 
-                if workspace.scs_props.variant_views in ('vertical', 'horizontal'):
-                    split2.prop(workspace.scs_props, 'variant_list_sorted', text='Variants', icon='SORTALPHA', expand=True, toggle=True)
+class SCS_TOOLS_PT_VariantAdditionalParts(_VariantsSubPanelBlDefs, Panel):
+    """Parts in no variant (road edge lines, rumble strips, overlays) to show in the variant preview."""
 
-            if workspace.scs_props.variant_views == 'compact':
+    bl_label = "Additional Parts"
+    bl_order = 3
 
-                # COMPACT LIST
-                row = layout.row()
-                col = row.column(align=True)
+    @classmethod
+    def poll(cls, context):
+        return (_VariantsSubPanelBlDefs.poll(context)
+                and bool(_object_utils.get_parts_in_no_variant(context.active_object)))
 
-                active_scs_variant = scs_root.scs_props.active_scs_variant
-                self.draw_part_list_for_variant(col, workspace, variant_inventory[active_scs_variant])
+    def draw(self, context):
+        layout = self.get_layout()
+        scs_root = context.active_object
+        extra_parts = _object_utils.get_parts_in_no_variant(scs_root)
+        shown = set(p for p in scs_root.scs_props.scs_root_preview_extra_parts.split(";") if p)
 
-            elif workspace.scs_props.variant_views == 'vertical':
+        col = layout.column(align=True)
+        col.label(text="Parts in no variant: %d shown of %d" % (len(shown & set(extra_parts)), len(extra_parts)), icon='MOD_ARRAY')
+        col.label(text="For road templates, Road Look Preview offers these by their road look names.")
+        flow = layout.grid_flow(columns=4, even_columns=True, align=True)
+        for part_name in extra_parts:
+            props = flow.operator('object.scs_tools_toggle_preview_extra_part', text=part_name, depress=part_name in shown)
+            props.part_name = part_name
 
-                # VERTICAL LIST
-                col = layout.column(align=False)
-                if workspace.scs_props.variant_list_sorted:
-                    inventory_names = []
-                    for variant in variant_inventory:
-                        inventory_names.append(variant.name)
-                    for name in sorted(inventory_names):
-                        variant = variant_inventory[name]
-                        self.draw_vertical_variant_block(col, workspace, variant)
-                else:
-                    for variant in variant_inventory:
-                        self.draw_vertical_variant_block(col, workspace, variant)
 
-            elif workspace.scs_props.variant_views == 'horizontal':
+class SCS_TOOLS_PT_VariantClassicTable(_VariantsSubPanelBlDefs, Panel):
+    """The original tools' variant-part table (the Variant Grid does the same job)."""
 
-                # HORIZONTAL LIST
-                row = layout.row(align=True)
-                if workspace.scs_props.variant_list_sorted:
-                    inventory_names = []
-                    for variant in variant_inventory:
-                        inventory_names.append(variant.name)
-                    for name in sorted(inventory_names):
-                        variant = variant_inventory[name]
-                        self.draw_horizontal_scs_variant_block(row.column(align=True), workspace, variant)
-                else:
-                    for variant in variant_inventory:
-                        self.draw_horizontal_scs_variant_block(row.column(align=True), workspace, variant)
+    bl_label = "Classic Part Table"
+    bl_order = 4
+
+    @classmethod
+    def poll(cls, context):
+        return (_VariantsSubPanelBlDefs.poll(context)
+                and len(context.active_object.scs_object_variant_inventory) > 0)
+
+    def draw(self, context):
+        layout = self.get_layout()
+        workspace = context.workspace
+        scs_root = context.active_object
+        variant_inventory = scs_root.scs_object_variant_inventory
+
+        row = layout.row(align=True)
+        row.prop(workspace.scs_props, 'variant_views', text="", expand=True, toggle=True)
+        row.separator()
+        row.prop(workspace.scs_props, 'part_list_sorted', text="", icon='SORTALPHA', toggle=True)
+
+        view = workspace.scs_props.variant_views
+        if view in ('compact', 'integrated'):
+            col = layout.column(align=True)
+            active = scs_root.scs_props.active_scs_variant
+            if 0 <= active < len(variant_inventory):
+                SCS_TOOLS_PT_Variants.draw_icon_variant_tools_line(col, active)
+                SCS_TOOLS_PT_Variants.draw_part_list_for_variant(col, workspace, variant_inventory[active])
+            return
+
+        names = [v.name for v in variant_inventory]
+        if workspace.scs_props.variant_list_sorted:
+            names = sorted(names)
+        if view == 'vertical':
+            col = layout.column(align=False)
+            for name in names:
+                SCS_TOOLS_PT_Variants.draw_vertical_variant_block(col, workspace, variant_inventory[name])
+        else:
+            row = layout.row(align=True)
+            for name in names:
+                SCS_TOOLS_PT_Variants.draw_horizontal_scs_variant_block(row.column(align=True), workspace, variant_inventory[name])
 
 
 class SCS_TOOLS_PT_LooksOnObject(_ObjectPanelBlDefs, Panel):
@@ -1268,6 +1285,8 @@ classes = (
     SCS_TOOLS_PT_PreviewModel,
     SCS_TOOLS_PT_Parts,
     SCS_TOOLS_PT_Variants,
+    SCS_TOOLS_PT_VariantAdditionalParts,
+    SCS_TOOLS_PT_VariantClassicTable,
     SCS_TOOLS_PT_LooksOnObject,
     SCS_TOOLS_PT_Animations,
     SCS_TOOLS_PT_AnimPlayer,

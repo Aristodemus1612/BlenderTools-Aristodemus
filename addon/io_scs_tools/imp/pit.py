@@ -240,22 +240,18 @@ def _get_look(section):
                            (mat_alias,))
 
 
-            # Extra temporary treatment for new attributes not supported in older material format used by BT
-            #
-            # If "diffuse_secondary" attribute is detected, remove it
-            if attributes.pop("diffuse_secondary", None) is not None:
-                lprint("I Unsupported attribute: 'diffuse_secondary' in current material configuration inside material %r, ignoring it!",
-                       (mat_alias,))
+            # NOTE: newer-format attributes (diffuse_secondary, is_terrain_material, heightmap_*, ...) are kept:
+            # attributes unknown to the shader preset are stored aside on the material and written back on export.
 
-            # If "is_dynamic_road" attribute is detected, remove it
-            if attributes.pop("is_dynamic_road", None) is not None:
-                lprint("W Unsupported attribute: 'is_dynamic_road' inside material %r, ignoring it! Material will not work as intended after export!",
-                       (mat_alias,))
-
-            # If "is_terrain_material" attribute is detected, remove it
-            if attributes.pop("is_terrain_material", None) is not None:
-                lprint("W Unsupported attribute: 'is_terrain_material' inside material %r, ignoring it! Material will not work as intended after export!",
-                       (mat_alias,))
+            # NOTE: "is_dynamic_road" is now supported (universal road template line/overlay decals,
+            # preset "dif.spec" with DEPTH flavor), so it's kept. ConverterPIX writes it as FLOAT; store it as INT.
+            if "is_dynamic_road" in attributes:
+                dyn_format, dyn_value = attributes["is_dynamic_road"]
+                try:
+                    dyn_int = int(round(float(dyn_value[0] if isinstance(dyn_value, (list, tuple)) else dyn_value)))
+                except (TypeError, ValueError):
+                    dyn_int = 0
+                attributes["is_dynamic_road"] = ("INT", [dyn_int])
 
             look_mat_settings[mat_alias] = (mat_effect, mat_flags, attributes, textures, sec)
 
