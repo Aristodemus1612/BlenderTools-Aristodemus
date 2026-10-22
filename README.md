@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus)
 
-![Version](https://img.shields.io/badge/version-2.5.0a-blue)
+![Version](https://img.shields.io/badge/version-2.5.0b-blue)
 ![Status](https://img.shields.io/badge/status-test%20release-orange)
 ![Blender](https://img.shields.io/badge/Blender-5.0%2B-e87d0d)
 ![Game](https://img.shields.io/badge/ETS2%20%2F%20ATS-1.61-2b6cb0)
@@ -110,7 +110,7 @@ release, Michaleczeq's fork or an earlier test build.
 
 ### 2. Install this version
 
-1. Download `scs_tools_aristodemus_2.5.0a.zip` from the
+1. Download `scs_tools_aristodemus_2.5.0b.zip` from the
    [Releases](../../releases) page. Don't unpack it.
 2. In **Edit > Preferences > Add-ons**, open the drop-down menu at the top right and choose
    **Install from Disk**. Select the zip.

@@ -21,6 +21,7 @@
 from ..utils import name as _name_utils
 from ..utils.printout import lprint
 from ..internals.containers import pix as _pix_container
+from ..internals.structure import SectionData as _SectionData
 
 
 def _get_header(pit_container):
@@ -71,6 +72,125 @@ def _get_global(pit_container):
     return look_count, variant_count, part_count, material_count
 
 
+_AUTOMAT_UNIT_RE = None
+
+
+def _parse_automat_value(raw):
+    """Parse a value from AutoMat SII content: string, number, bool or tuple."""
+    raw = raw.strip()
+    if raw.startswith('"'):
+        end = raw.find('"', 1)
+        return raw[1:end] if end > 0 else raw[1:]
+    if raw.startswith("("):
+        inner = raw.strip("()")
+        out = []
+        for part in inner.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                out.append(float(part))
+            except ValueError:
+                out.append(part)
+        return tuple(out)
+    if raw in ("true", "false"):
+        return raw == "true"
+    try:
+        return int(raw)
+    except ValueError:
+        try:
+            return float(raw)
+        except ValueError:
+            return raw
+
+
+def _automat_to_material_section(automat_section):
+    """Convert an "AutoMat" look entry (newer material format, written by the AutoMat export)
+    into the equivalent legacy "Material" section, so the rest of the importer handles both alike.
+
+    :param automat_section: AutoMat section with Alias, Index and Content (SII text) properties
+    :type automat_section: io_scs_tools.internals.structure.SectionData
+    :return: Material section, or None if the content can't be read
+    :rtype: io_scs_tools.internals.structure.SectionData | None
+    """
+    import re
+    from ..internals.containers.parsers.mat_convert import AttributeConverter
+
+    global _AUTOMAT_UNIT_RE
+    if _AUTOMAT_UNIT_RE is None:
+        _AUTOMAT_UNIT_RE = re.compile(r'([a-z_0-9]+)\s*:\s*([.\w]+)\s*\{([^{}]*)\}', re.S)
+
+    alias = content = None
+    for prop in automat_section.props:
+        if prop[0] == "Alias":
+            alias = prop[1]
+        elif prop[0] == "Content":
+            content = prop[1]
+    if alias is None or not isinstance(content, str) or "xmat_auto_header" not in content:
+        lprint("W AutoMat entry %r has no readable content, skipping it!", (alias,))
+        return None
+
+    effect = ""
+    inputs = []     # (unit type, name, value)
+    samplers = []   # (name, value)
+    for unit_type, _unit_name, body in _AUTOMAT_UNIT_RE.findall(content):
+        props = {}
+        for line in body.splitlines():
+            if ":" in line:
+                key, val = line.split(":", 1)
+                props[key.strip()] = _parse_automat_value(val)
+        if unit_type == "xmat_auto_header":
+            effect = str(props.get("effect", ""))
+        elif unit_type.startswith("xmat_input_"):
+            inputs.append((unit_type[len("xmat_input_"):], props.get("name"), props.get("value")))
+        elif unit_type == "xmat_sampler":
+            samplers.append((props.get("name"), props.get("value")))
+
+    if effect.endswith(".rfx"):
+        effect = effect[:-4]
+
+    # convert newer attribute names back to the legacy ones (additional_ambient -> add_ambient,
+    # specular_secondary + shininess_secondary -> aux[3], ...); several inputs can fill one aux
+    converter = AttributeConverter()
+    attributes = {}   # tag -> (format, value tuple), insertion ordered
+    for typ, name, value in inputs:
+        if name is None:
+            continue
+        results = converter.effect_to_material(name, value)
+        if not isinstance(results, list):
+            results = [results]
+        for tag, val in results:
+            if typ == "str":
+                attributes[tag] = ("STRING", (str(val),))
+            elif typ == "int" and tag == name:
+                attributes[tag] = ("INT", (int(val),))
+            else:
+                vals = tuple(float(v) for v in val) if isinstance(val, (tuple, list)) else (float(val),)
+                attributes[tag] = ("FLOAT" if len(vals) == 1 else "FLOAT%d" % len(vals), vals)
+
+    material = _SectionData("Material")
+    material.props.append(["Alias", alias])
+    material.props.append(["Effect", effect])
+    material.props.append(["Flags", 0])
+    material.props.append(["AttributeCount", len(attributes)])
+    material.props.append(["TextureCount", len(samplers)])
+    for tag, (fmt, val) in attributes.items():
+        attr = _SectionData("Attribute")
+        attr.props.append(["Format", fmt])
+        attr.props.append(["Tag", tag])
+        attr.props.append(["Value", val])
+        material.sections.append(attr)
+    for idx, (name, value) in enumerate(samplers):
+        path = str(value or "")
+        if path.endswith(".tobj"):
+            path = path[:-5]
+        tex = _SectionData("Texture")
+        tex.props.append(["Tag", "texture[%d]:%s" % (idx, name)])
+        tex.props.append(["Value", path])
+        material.sections.append(tex)
+    return material
+
+
 def _get_look(section):
     """Receives a Look section and returns its properties in its own variables.
     For any item that fails to be found, it returns None."""
@@ -83,6 +203,18 @@ def _get_look(section):
         else:
             lprint('\nW Unknown property in "Look" data: "%s"!', prop[0])
     look_mat_settings = {}
+
+    # newer material format: "AutoMat" entries are converted to legacy "Material" sections
+    if any(sec.type == "AutoMat" for sec in section.sections):
+        converted = []
+        for sec in section.sections:
+            if sec.type == "AutoMat":
+                sec = _automat_to_material_section(sec)
+                if sec is None:
+                    continue
+            converted.append(sec)
+        section.sections = converted
+
     for sec in section.sections:
         if sec.type == "Material":
             mat_alias = mat_effect = mat_flags = attribute_count = texture_count = None

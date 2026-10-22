@@ -2,6 +2,15 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.0b (2026-10-22), test release fix
+
+### Fixes
+- **Importing AutoMat files now works.** Models exported with the AutoMat format (and other files in
+  the newer material format) used to import with empty materials: no values, textures or
+  substances. AutoMat entries are now read and converted, so all looks come back as they were
+  exported, including edge blend / heightmap and secondary diffuse settings.
+- The file reader now understands multi-line text blocks (`"""..."""`), which AutoMat entries use.
+
 ## 2.5.0a (2026-10-22), test release for ETS2 / ATS 1.61
 
 The first public test release of this update. It is based on Michaleczeq's fork of
