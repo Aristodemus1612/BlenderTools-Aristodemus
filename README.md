@@ -18,6 +18,8 @@ variants, and support for current game materials.
 > **Not made, endorsed or supported by SCS Software.** Please don't contact SCS about this
 > version. Use the official tools if you need the official release.
 
+> **AI Disclaimer** Claude by Anthropic has been used as a coding tool for this update. It is used as a support tool only, I do not support AI as a creative replacment.
+
 ## Contents
 
 - [Requirements](#requirements)
