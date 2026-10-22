@@ -265,7 +265,21 @@ def _read_section(file, section_ids):
         if data_type in _DATA_TYPE_END_SET:
             break
         # print('%s  =-> "%s"' % (type, line))
-        if data_type == 'Prop':
+        if data_type == 'Prop' and line.count('"""') == 1:
+            # MULTI-LINE STRING (e.g. AutoMat "Content"): read raw lines until the closing triple quote
+            prop_key = line.split(':', 1)[0].strip()
+            parts = [line.split('"""', 1)[1]]
+            while True:
+                raw = file.readline()
+                if not raw:
+                    break
+                raw = raw.rstrip("\r\n")
+                if '"""' in raw:
+                    parts.append(raw.split('"""', 1)[0])
+                    break
+                parts.append(raw)
+            props.append([prop_key, "\n".join(parts)])
+        elif data_type == 'Prop':
             # print(' -++- line: %s' % line)
             prop = _get_prop(line)
             # print('prop: %s' % prop)

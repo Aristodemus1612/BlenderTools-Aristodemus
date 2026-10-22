@@ -22,7 +22,7 @@ bl_info = {
     "name": "SCS Tools (Aristodemus)",
     "description": "Setup models, Import-Export SCS data format. Unofficial update for ETS2 / ATS 1.61 (test release)",
     "author": "Simon Lusenc (50keda), Milos Zajic (4museman), Michal (Michaleczeq), Aristodemus",
-    "version": (2, 5, "0a"),
+    "version": (2, 5, "0b"),
     "blender": (5, 0, 0),
     "location": "File > Import-Export",
     "doc_url": "http://modding.scssoft.com/wiki/Documentation/Tools/SCS_Blender_Tools",
