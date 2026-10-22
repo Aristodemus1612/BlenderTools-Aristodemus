@@ -269,16 +269,42 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
 
+def _wrapped_labels(layout, text, icon='NONE', indent=False):
+    """Draw text as several labels, wrapped to the width of the current region."""
+    import textwrap
+    width_px = 300
+    try:
+        region = bpy.context.region
+        if region and region.width > 1:
+            width_px = region.width
+    except AttributeError:
+        pass
+    scale = bpy.context.preferences.system.ui_scale or 1.0
+    chars = max(int((width_px - 60 * scale) / (7.0 * scale)), 20)
+    lines = textwrap.wrap(text, width=chars) or [""]
+    for i, line in enumerate(lines):
+        if i == 0 and icon != 'NONE':
+            layout.label(text=line, icon=icon)
+        else:
+            layout.label(text=line, icon='BLANK1' if (icon != 'NONE' or indent) else 'NONE')
+
+
 def _draw_legacy_material_warning(layout):
     """Warn that the legacy material output can't carry settings of newer game materials."""
     from ..utils import mat_attrs as _mat_attrs
     affected = _mat_attrs.get_materials_needing_automat(bpy.data.materials)
-    col = layout.column(align=True)
+    box = layout.box()
+    col = box.column(align=True)
     if affected:
         col.alert = True
-        col.label(text="%d material(s) use settings the legacy format can't store:" % len(affected), icon='ERROR')
-        col.label(text="    " + ", ".join(affected[:3]) + (", ..." if len(affected) > 3 else ""))
-        col.label(text="    They would be left out (edge blend / heightmap, secondary diffuse, terrain).")
-        col.label(text="    Pick \"Game Data Format, ver. 5 (AutoMat)\" to keep them.")
+        _wrapped_labels(col, "%d material(s) use settings this legacy format can't store." % len(affected), icon='ERROR')
+        names = ", ".join(affected[:3]) + (" and %d more" % (len(affected) - 3) if len(affected) > 3 else "")
+        _wrapped_labels(col, "Affected: " + names, indent=True)
+        _wrapped_labels(col, "Edge blend / heightmap, secondary diffuse and terrain settings would be left out.", indent=True)
+        col.alert = False
+        col.separator()
+        _wrapped_labels(col, "Export with AutoMat to keep them:", indent=True)
     else:
-        col.label(text="Legacy material format. Newer game materials need AutoMat.", icon='INFO')
+        _wrapped_labels(col, "Legacy material format. Current game materials need AutoMat.", icon='INFO')
+    row = box.row()
+    row.prop_enum(_get_scs_globals(), 'export_output_type', '5_AM', text="Switch to AutoMat", icon='CHECKMARK')

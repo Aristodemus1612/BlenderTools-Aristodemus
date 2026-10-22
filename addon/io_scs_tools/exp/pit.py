@@ -569,8 +569,9 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         attribute_cnt += 1
 
                     if new_format_skipped or ".heightmap" in effect_name:
-                        lprint("W Material %r uses newer material format features (%s) which the legacy material output "
-                               "can't carry. Use the AutoMat output format for this model.",
+                        lprint("W Material %r uses settings the legacy material format can't store:\n\t   "
+                               "%s.\n\t   "
+                               "They were left out. Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
                                (material.name, ", ".join(sorted(set(new_format_skipped))) or "heightmap flavor"))
 
                     material_export_data = _SectionData("Material")

@@ -46,8 +46,8 @@ any 2.4 version are migrated when opened.
   the material panel. They used to be dropped.
 - The AutoMat export writes them back. The legacy material export skips them, with a warning in
   the export report.
-- The export settings warn when the legacy material format is selected, and list the materials
-  that would lose settings.
+- The export settings warn when the legacy material format is selected, list the materials that
+  would lose settings, and offer a **Switch to AutoMat** button.
 - Edge-blend / heightmap ("HMAP") shader flavour enabled in the shader presets.
 - Binary TOBJ files are read.
 - Textures that aren't found locally keep their game path on export instead of an empty path.
