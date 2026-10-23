@@ -2,6 +2,26 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.0c (2026-10-23), prefab conversion fix
+
+### Fixes
+- **Exported models and prefabs convert again.** Several things in the exported material files
+  stopped SCS's conversion tool, so only the `.pmg` was written:
+  - AutoMat wrote some old slot names the game doesn't accept (`aux[0]`, `aux[2]`). They are now
+    written as the game's names: `far_color` / `far_specular_power` on terrain-style materials
+    and `amod_decal_blending_factors` on alpha-modulated decals.
+  - AutoMat wrote whole-number settings (`queue_bias`, `is_terrain_material`, heightmap shape
+    types and `is_dynamic_road`) as decimals. They are written as whole numbers now.
+  - AutoMat no longer writes `is_dynamic_road` and `lod_switch_distance` when they are 0, which
+    matches the game's own materials.
+  - The legacy (Material) format kept the edge-blend / heightmap flavour in the effect name, but
+    it can't store its settings. The flavour and its heightmap textures are now left out, with a
+    warning. Use AutoMat to keep them.
+- **Prefab signs keep their model.** Sign models, semaphore profiles and trigger actions that
+  aren't in the loaded sign / semaphore / trigger libraries used to be exported empty. They are
+  now kept as imported.
+- **AutoMat is now the default export format.**
+
 ## 2.5.0b (2026-10-22), test release fix
 
 ### Fixes

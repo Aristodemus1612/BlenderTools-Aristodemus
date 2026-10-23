@@ -430,6 +430,22 @@ def _create_node_locator(
     return locator
 
 
+def _keep_unknown_id(item_name, item_id):
+    """Keep a definition ID even when it isn't in the loaded library (e.g. the game's sign.sii isn't
+    reachable from the project paths), so export writes it back instead of an empty value.
+    Library entries are stored as "<name> : <id>", which is what the exporter reads the ID from.
+
+    :param item_name: name found in the library ("" when not found)
+    :type item_name: str
+    :param item_id: ID read from the file
+    :type item_id: str
+    :rtype: str
+    """
+    if item_name or not item_id:
+        return item_name
+    return "%s : %s" % (item_id, item_id)
+
+
 def _create_sign_locator(
         sign_name,
         sign_position,
@@ -442,7 +458,7 @@ def _create_sign_locator(
     if locator:
         locator.scs_props.locator_prefab_type = 'Sign'
         sign_model_value = _inventory.get_item_name(scs_sign_model_inventory, sign_model_id, report_errors=True)
-        locator.scs_props.locator_prefab_sign_model = sign_model_value
+        locator.scs_props.locator_prefab_sign_model = _keep_unknown_id(sign_model_value, sign_model_id)
         locator.scs_props.scs_part = sign_part
 
     return locator
@@ -490,7 +506,8 @@ def _create_traffic_light_locator(
 
         # try to set semaphore profile only if it has some value
         if tsem_profile != "":
-            tsem_profile_value = _inventory.get_item_name(scs_tsem_profile_inventory, tsem_profile, report_errors=True)
+            tsem_profile_value = _keep_unknown_id(
+                _inventory.get_item_name(scs_tsem_profile_inventory, tsem_profile, report_errors=True), tsem_profile)
             locator.scs_props.locator_prefab_tsem_profile = tsem_profile_value
 
         locator.scs_props.locator_prefab_tsem_type = str(tsem_type)
@@ -616,7 +633,8 @@ def _create_trigger_locator(
     if locator:
         locator.scs_props.locator_prefab_type = 'Trigger Point'
 
-        action_value = _inventory.get_item_name(scs_trigger_actions_inventory, trp_action, report_errors=True)
+        action_value = _keep_unknown_id(
+            _inventory.get_item_name(scs_trigger_actions_inventory, trp_action, report_errors=True), trp_action)
         locator.scs_props.locator_prefab_tp_action = action_value
 
         locator.scs_props.locator_prefab_tp_range = trp_range

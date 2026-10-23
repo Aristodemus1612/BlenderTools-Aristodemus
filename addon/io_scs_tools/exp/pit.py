@@ -531,6 +531,10 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         elif item.type == "Texture":
                             # print('     Texture:')
 
+                            # heightmap textures belong to the heightmap flavour, which the legacy format can't carry
+                            if ".heightmap" in effect_name and item.get_prop("Tag")[1].split(":")[1].startswith("texture_heightmap"):
+                                continue
+
                             texture_data = _SectionData("Texture")
                             for rec in item.props:
                                 # print('       rec: %r' % str(rec))
@@ -571,12 +575,17 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     if new_format_skipped or ".heightmap" in effect_name:
                         lprint("W Material %r uses settings the legacy material format can't store:\n\t   "
                                "%s.\n\t   "
-                               "They were left out. Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
+                               "They were left out (and the heightmap flavour removed from the effect). "
+                               "Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
                                (material.name, ", ".join(sorted(set(new_format_skipped))) or "heightmap flavor"))
+
+                    # the legacy format can't carry the heightmap flavour: write the effect without it,
+                    # so the conversion tool accepts the material (edge blend is lost, see warning above)
+                    legacy_effect_name = effect_name.replace(".heightmap", "")
 
                     material_export_data = _SectionData("Material")
                     material_export_data.props.append(("Alias", material.name))
-                    material_export_data.props.append(("Effect", effect_name))
+                    material_export_data.props.append(("Effect", legacy_effect_name))
                     material_export_data.props.append(("Flags", flags))
                     material_export_data.props.append(("AttributeCount", attribute_cnt))
                     material_export_data.props.append(("TextureCount", texture_cnt))

@@ -1370,7 +1370,7 @@ class SCSGlobals(bpy.types.PropertyGroup):
             ('EF', "Exchange Format, ver. 1",
              "Export 'Exchange Formats' (version 1) file formats designed for data exchange between different modeling tools"),
         ),
-        default='5',
+        default='5_AM',
         update=export_output_type_update,
     )
     export_pit_file: BoolProperty(

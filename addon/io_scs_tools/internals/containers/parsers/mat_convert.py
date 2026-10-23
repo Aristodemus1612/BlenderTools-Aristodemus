@@ -152,6 +152,19 @@ map_to_effect_tg0tg1 = {
     ],
 }
 
+# terrain-like materials with texture generation keep their distant colour in aux[2]
+map_to_effect_far = {
+    "aux[2]": [
+        AttributeConvert("far_color", 3, 0),
+        AttributeConvert("far_specular_power", 1, 3),
+    ],
+}
+
+# alpha-modulated decal blending (eut2.dif.spec.amod.dif.spec...)
+map_to_effect_amod = {
+    "aux[0]": [AttributeConvert("amod_decal_blending_factors", 2, 0)],
+}
+
 map_to_effect_light = {
     "aux[0]": [AttributeConvert("depth_bias", 1, 0)],
     "aux[5]": [
@@ -324,8 +337,14 @@ class AttributeConverter:
         if "leaves" in effect:
             maps_to_check.append(map_to_effect_leaves)
 
+        if ".amod." in effect:
+            maps_to_check.append(map_to_effect_amod)
+
         if "tg0" in effect or "tg1" in effect:
             maps_to_check.append(map_to_effect_tg0tg1)
+            # water uses aux[2] for its own colour (map_to_effect_water)
+            if "water" not in effect:
+                maps_to_check.append(map_to_effect_far)
 
         # I merged map for "lightmap" into "light" and added other flavors where it's used.
         # "light.tex" was simplified to "light" due to new shader without ".tex" part.
