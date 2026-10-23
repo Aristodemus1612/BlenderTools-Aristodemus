@@ -2,6 +2,31 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.1 (2026-10-23), import from game archives
+
+### New
+- **Import straight from game archives.** **File > Import > SCS Models from Game Archives (*.scs)**
+  browses `.scs` archives, converts the chosen model (and its animations) with ConverterPIX and
+  imports it. Based on 50keda's ConverterPIX Wrapper, now built in, so the separate add-on isn't
+  needed.
+- **ConverterPIX is included** for Windows (64- and 32-bit) and Linux. It no longer has to be
+  downloaded on first use; a newer version can still be downloaded from the import window.
+
+### Fixes
+- **No more "WinError 193: %1 is not a valid Win32 application".** The wrapper saved whatever
+  GitHub returned as `converter_pix.exe`, so a failed download replaced the program with a web
+  page. Downloads are now checked before they are used, and a broken copy falls back to the
+  included one.
+- **Animations can be picked again.** In the wrapper's archive browser, checkboxes couldn't be ticked
+  in Blender 5, so animations were never converted. Animations are now ticked by clicking them.
+- **Disabling or reloading the add-on removes its File menu entries.** The import and export
+  entries were removed from the wrong menus, so they stayed behind.
+
+### Licence
+- The add-on is now distributed under **GPL-3.0**, because it includes ConverterPIX Wrapper code
+  (GPL-3.0). The original SCS Blender Tools files are GPL-2.0 or later, which allows this.
+  ConverterPIX is included under the LGPL-3.0.
+
 ## 2.5.0d (2026-10-23), AutoMat material fix
 
 ### Fixes

@@ -22,7 +22,7 @@ bl_info = {
     "name": "SCS Tools (Aristodemus)",
     "description": "Setup models, Import-Export SCS data format. Unofficial update for ETS2 / ATS 1.61 (test release)",
     "author": "Simon Lusenc (50keda), Milos Zajic (4museman), Michal (Michaleczeq), Aristodemus",
-    "version": (2, 5, "0d"),
+    "version": (2, 5, 1),
     "blender": (5, 0, 0),
     "location": "File > Import-Export",
     "doc_url": "http://modding.scssoft.com/wiki/Documentation/Tools/SCS_Blender_Tools",
@@ -324,6 +324,11 @@ def add_menu_func(self, context):
     self.layout.separator()
 
 
+def _converter_pix_menu_import(self, context):
+    from .operators.converter_pix import menu_func_import as _menu
+    _menu(self, context)
+
+
 def menu_func_import(self, context):
     self.layout.operator(SCS_TOOLS_OT_Import.bl_idname, text="SCS Game Object (.pim)",
                          icon_value=_icons.get_icon(_ICONS_consts.Types.scs_object_menu))
@@ -427,6 +432,7 @@ def register():
     # MENU REGISTRATION
     bpy.types.TOPBAR_MT_editor_menus.append(menu_scs_tools)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.append(_converter_pix_menu_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.VIEW3D_MT_add.prepend(add_menu_func)
 
@@ -446,8 +452,9 @@ def unregister():
 
     # REMOVE MENU ENTRIES
     bpy.types.TOPBAR_MT_editor_menus.remove(menu_scs_tools)
-    bpy.types.TOPBAR_MT_file_import.remove(menu_func_export)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(_converter_pix_menu_import)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.VIEW3D_MT_add.remove(add_menu_func)
 
     # REMOVE MAIN MODULE CLASSES

@@ -1,10 +1,10 @@
 # SCS Tools (Aristodemus)
 
-![Version](https://img.shields.io/badge/version-2.5.0d-blue)
+![Version](https://img.shields.io/badge/version-2.5.1-blue)
 ![Status](https://img.shields.io/badge/status-test%20release-orange)
 ![Blender](https://img.shields.io/badge/Blender-5.0%2B-e87d0d)
 ![Game](https://img.shields.io/badge/ETS2%20%2F%20ATS-1.61-2b6cb0)
-![Licence](https://img.shields.io/badge/licence-GPL--2.0-green)
+![Licence](https://img.shields.io/badge/licence-GPL--3.0-green)
 
 An unofficial update of **SCS Blender Tools**, the Blender add-on for creating models for
 Euro Truck Simulator 2 and American Truck Simulator. It is built on Michaleczeq's fork of the
@@ -44,7 +44,7 @@ change is listed in the **[Changelog](CHANGELOG.md)**.
 |---|---|
 | **Blender** | 5.0 or newer. Tested on **Blender 5.2.0**. Blender 4.x and older are not supported. |
 | **Game** | Euro Truck Simulator 2 / American Truck Simulator **1.61** |
-| **Model conversion** | [ConverterPIX](https://github.com/mwl4/ConverterPIX) to bring game models into Blender, and SCS's own conversion tool for your exports |
+| **Model conversion** | [ConverterPIX](https://github.com/mwl4/ConverterPIX) is included for bringing game models into Blender. SCS's own conversion tool is needed for your exports. |
 
 ## Features
 
@@ -76,6 +76,12 @@ change is listed in the **[Changelog](CHANGELOG.md)**.
 - **Binary TOBJ support.** Texture files straight from the game archives can be read.
 - **Game texture paths kept.** Textures that aren't in your project keep their game path on
   export.
+
+### Importing from game archives
+- **Import straight from `.scs` archives.** **File > Import > SCS Models from Game Archives (*.scs)**
+  browses the game's archives, converts the model you pick (with its animations, if you want them)
+  and imports it. ConverterPIX is included, so nothing else needs installing. Based on
+  50keda's ConverterPIX Wrapper.
 
 ### Data folders
 - **Additional Data Folders.** Use extracted game archives or other mods as read-only sources of
@@ -110,7 +116,7 @@ release, Michaleczeq's fork or an earlier test build.
 
 ### 2. Install this version
 
-1. Download `scs_tools_aristodemus_2.5.0d.zip` from the
+1. Download `scs_tools_aristodemus_2.5.1.zip` from the
    [Releases](../../releases) page. Don't unpack it.
 2. In **Edit > Preferences > Add-ons**, open the drop-down menu at the top right and choose
    **Install from Disk**. Select the zip.
@@ -204,9 +210,22 @@ See the [User Guide](docs/guide.md#1-setting-up-paths) for more examples.
 
 ## Getting game models into Blender
 
-Game models must be converted to the tools' format first. Use
-[ConverterPIX](https://github.com/mwl4/ConverterPIX) by mwl4. Then import the `.pim` file through
-**File > Import > SCS Formats**.
+Use **File > Import > SCS Models from Game Archives (*.scs)**:
+1. Set your **SCS Project Base Path** first. Converted files are written there.
+2. Pick one or more archives, for example `base.scs`, `base_share.scs`, `def.scs` and the DLC
+   archives the model needs. Add archives you always use with **Add Archives to List**.
+3. In the next window, browse to the model (`.pmg`) on the left. For an animated model, browse to
+   its animations (`.pma`) on the right and click each one to tick it.
+4. Click **OK**. The model is converted into your project and imported. Tick **Only convert?** to
+   convert without importing.
+
+The included [ConverterPIX](https://github.com/mwl4/ConverterPIX) by mwl4 does the conversion. The
+download button in the import window gets its latest version from GitHub; if that fails, the
+included one keeps being used. If you prefer, you can still convert with ConverterPIX yourself and
+import the `.pim` through **File > Import > SCS Game Object (.pim)**.
+
+If you have 50keda's separate **ConverterPIX Wrapper** add-on installed, you can remove it: it
+does the same job.
 
 ## Exporting
 
@@ -271,13 +290,21 @@ Open an issue in the [Issues](../../issues) tab and include:
 |---|---|
 | **Simon Lusenc (50keda)** and **Milos Zajic (4museman)**, SCS Software | The original SCS Blender Tools |
 | **Michal (Michaleczeq)** | The unofficial fork this update is built on |
-| **mwl4** | ConverterPIX, used to bring game models into Blender |
+| **Simon Lusenc (50keda)** | ConverterPIX Wrapper, the base of the game archive importer |
+| **mwl4** | ConverterPIX, included for bringing game models into Blender |
 | **Aristodemus** | This update |
 
 ## Licence
 
-Released under the **GNU General Public License, version 2 or later**, the same licence as the
-original tools. See [LICENSE](LICENSE).
+Released under the **GNU General Public License, version 3**. See [LICENSE](LICENSE).
+
+The original SCS Blender Tools files are licensed GPL-2.0 *or later*. Since 2.5.1 the add-on includes
+code from 50keda's [ConverterPIX Wrapper](https://github.com/simon50keda/ConverterPIXWrapper)
+(GPL-3.0), so the add-on as a whole is distributed under GPL-3.0.
+
+The included ConverterPIX executables (`io_scs_tools/bin/`) are by mwl4, licensed under the
+GNU Lesser General Public License, version 3. Their source code is at
+https://github.com/mwl4/ConverterPIX; see `io_scs_tools/bin/README.md`.
 
 Euro Truck Simulator 2, American Truck Simulator and their game data are the property of SCS
 Software. No game data is included in this repository.

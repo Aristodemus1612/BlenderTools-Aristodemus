@@ -18,6 +18,7 @@
 
 # Copyright (C) 2013-2019: SCS Software
 
+from io_scs_tools.operators import converter_pix
 from io_scs_tools.operators import material
 from io_scs_tools.operators import mesh
 from io_scs_tools.operators import object
@@ -27,6 +28,7 @@ from io_scs_tools.operators import world
 
 
 def register():
+    converter_pix.register()
     material.register()
     mesh.register()
     object.register()
@@ -42,3 +44,4 @@ def unregister():
     scene.unregister()
     wm.unregister()
     world.unregister()
+    converter_pix.unregister()
