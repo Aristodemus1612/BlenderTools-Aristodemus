@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus): User Guide
 
-*Version 2.5.0d. Back to the [README](../README.md).*
+*Version 2.5.1. Back to the [README](../README.md).*
 
 This guide covers the features this update adds. For everything else (SCS roots, locators,
 prefabs, export basics), the original documentation on the
@@ -15,6 +15,7 @@ applies.
 5. [Road Look Preview (UN roads)](#5-road-look-preview-un-roads)
 6. [UN road lines](#6-un-road-lines)
 7. [Newer material settings and exporting](#7-newer-material-settings-and-exporting)
+8. [Importing from game archives](#8-importing-from-game-archives)
 
 ---
 
@@ -236,3 +237,25 @@ report repeats it for each material.
 
 Textures that aren't found in your project are written with their game path, so a model can keep
 using game textures without copying them.
+
+## 8. Importing from game archives
+
+**File > Import > SCS Models from Game Archives (*.scs)** converts a model straight out of the
+game's `.scs` archives and imports it. It is based on 50keda's ConverterPIX Wrapper and uses the
+included ConverterPIX by mwl4.
+
+1. **Pick archives.** Select one or more `.scs` (or `.zip`) files. A model usually needs
+   `base.scs` and `base_share.scs`; materials and textures may come from `def.scs`, `base_map.scs`
+   or DLC archives. Archives you always need can be added once with **Add Archives to List** and
+   reordered or removed there.
+2. **Pick the model.** The next window shows the archives' folders. Browse to the model's `.pmg`
+   on the left. For an animated model, tick **Animations** on the right and tick the `.pma` files
+   to bring along.
+3. **Import.** Converted files go into your **SCS Project Base Path**, keeping their game folders,
+   and the model is imported. **Only convert?** converts without importing. **Textures to Base?**
+   puts textures into a sibling `base` folder, so they aren't packed into your mod.
+
+The box at the top of the first window shows which ConverterPIX is used: **bundled** (included
+with the add-on) or **downloaded**. The download button fetches the latest one from GitHub. A
+failed download never replaces a working copy; the bundled one is used whenever the downloaded one
+is missing or broken.
