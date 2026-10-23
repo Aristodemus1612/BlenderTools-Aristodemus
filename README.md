@@ -214,8 +214,8 @@ Use **File > Import > SCS Models from Game Archives (*.scs)**:
 1. Set your **SCS Project Base Path** first. Converted files are written there.
 2. Pick one or more archives, for example `base.scs`, `base_share.scs`, `def.scs` and the DLC
    archives the model needs. Add archives you always use with **Add Archives to List**.
-3. In the next window, browse to the model (`.pmg`) and, for animated models, tick and pick its
-   animations (`.pma`).
+3. In the next window, browse to the model (`.pmg`) on the left. For an animated model, browse to
+   its animations (`.pma`) on the right and click each one to tick it.
 4. Click **OK**. The model is converted into your project and imported. Tick **Only convert?** to
    convert without importing.
 

@@ -312,7 +312,14 @@ class SCSConvPIXBrowserData(bpy.types.PropertyGroup):
                 # abort execution here, as setting active entry to -1 will anyway trigger another update
                 return
 
-            elif active_file_entry.name != "..":  # file was selected just return and do nothing with selection
+            elif active_file_entry.name != "..":  # file was selected
+
+                # in multi-select browsers (animations) clicking a file ticks or unticks it.
+                # NOTE: checkboxes and other inputs can't be edited in this dialog in Blender 5, but selecting
+                # a list entry works, so ticking is done through the selection
+                if self.multi_select:
+                    active_file_entry.do_import = not active_file_entry.do_import
+
                 return
 
         # remove old entries
@@ -344,6 +351,24 @@ class SCSConvPIXBrowserData(bpy.types.PropertyGroup):
 
     multi_select: BoolProperty(
         description="Can multiple files be selected?"
+    )
+
+    # NOTE: settings edited in the import dialog live here, not on the operator: changes to the
+    # operator's own properties didn't stick in this dialog (Blender 5), properties of this group do
+    use_entries: BoolProperty(
+        name="Use Animations",
+        description="Select animations for conversion and import?\n"
+                    "Gives you ability to convert and import animations for selected model (use it only if you are working with animated model).",
+        default=False,
+    )
+
+    split_factor: FloatProperty(
+        name="Browsers Slider",
+        description="Width of the model browser compared to the animations browser",
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR',
+        default=0.5,
     )
 
     file_extension: StringProperty(
@@ -402,7 +427,7 @@ class SCS_TOOLS_UL_ConvPIXFileEntry(bpy.types.UIList):
 
             row = split_line.row()
             row.alignment = "RIGHT"
-            row.prop(item, "do_import", text="")
+            row.label(text="", icon="CHECKBOX_HLT" if item.do_import else "CHECKBOX_DEHLT")
 
 
 class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
@@ -427,12 +452,6 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         description="Should textures be copied into the sibling 'base' directory, so they won't be included in mod packing?",
     )
 
-    import_animations: BoolProperty(
-        name="Use Animations",
-        description="Select animations for conversion and import?\n"
-                    "Gives you ability to convert and import animations for selected model (use it only if you are working with animated model)."
-    )
-
     model_browser_data: PointerProperty(
         description="Archive browser data for model selection.",
         type=SCSConvPIXBrowserData
@@ -441,14 +460,6 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
     anim_browser_data: PointerProperty(
         description="Archive browser data for animations selection.",
         type=SCSConvPIXBrowserData
-    )
-
-    browsers_slider: FloatProperty(
-        name="Browsers Slider",
-        min=0.0,
-        max=1.0,
-        subtype='FACTOR',
-        default=0.5
     )
 
     def check(self, context):
@@ -480,7 +491,7 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         self.model_browser_data.update_active_entry(context)
         self.anim_browser_data.update_active_entry(context)
 
-        self.browsers_slider = SCS_TOOLS_OT_ConvPIXListImport.__static_browsers_slider
+        self.model_browser_data.split_factor = SCS_TOOLS_OT_ConvPIXListImport.__static_browsers_slider
 
         return context.window_manager.invoke_props_dialog(self, width=500)
 
@@ -499,7 +510,7 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
 
         # collect all selected animations from animations browser
         anim_archive_subpaths = []
-        if self.import_animations:
+        if True:  # every ticked animation is converted (no separate on/off switch, see draw)
 
             for anim_file_entry in self.anim_browser_data.file_entries:
                 if anim_file_entry.do_import:
@@ -572,7 +583,7 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         SCS_TOOLS_OT_ConvPIXListImport.__static_last_anim_subpath = self.anim_browser_data.current_subpath
 
         # backup ui browsers divider value
-        SCS_TOOLS_OT_ConvPIXListImport.__static_browsers_slider = self.browsers_slider
+        SCS_TOOLS_OT_ConvPIXListImport.__static_browsers_slider = self.model_browser_data.split_factor
 
         print("Saving current settings for ConverterPIXWrapper import operator...")
 
@@ -583,16 +594,13 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         layout = self.layout
 
         # clip browsers slider to proper upper and lower values to avoid UI problems with split
-        if self.browsers_slider < 0.1 or self.browsers_slider > 0.85:
-            self.browsers_slider = min(0.85, max(0.1, self.browsers_slider))
+        split_factor = 0.5
 
         archive_names = [os.path.basename(archive_path.name) for archive_path in self.archive_paths]
         layout.label(text="Currently working upon: %r." % archive_names)
 
-        # browsers slider ratio
-        layout.prop(self, "browsers_slider")
 
-        browser_layout = layout.split(factor=self.browsers_slider)
+        browser_layout = layout.split(factor=split_factor)
 
         left_column = browser_layout.column(align=True)
         right_column = browser_layout.column(align=True)
@@ -620,14 +628,14 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         import_anim_row.label(text="Animations to %s:" % usage_type)
         import_anim_row = import_anim_row.row()
         import_anim_row.alignment = "RIGHT"
-        import_anim_row.prop(self, "import_animations", text="")
+        import_anim_row.label(text="(click to tick)")
 
         subpath_row = right_column.row(align=True)
         subpath_row.enabled = False
         subpath_row.prop(self.anim_browser_data, "current_subpath", text="")
 
         browser_row = right_column.row(align=True)
-        browser_row.enabled = self.import_animations
+        browser_row.enabled = True
         browser_row.template_list(
             'SCS_TOOLS_UL_ConvPIXFileEntry',
             list_id="AnimBrowser",

@@ -17,6 +17,8 @@ All notable changes to SCS Tools (Aristodemus).
   GitHub returned as `converter_pix.exe`, so a failed download replaced the program with a web
   page. Downloads are now checked before they are used, and a broken copy falls back to the
   included one.
+- **Animations can be picked again.** In the wrapper's archive browser, checkboxes couldn't be ticked
+  in Blender 5, so animations were never converted. Animations are now ticked by clicking them.
 - **Disabling or reloading the add-on removes its File menu entries.** The import and export
   entries were removed from the wrong menus, so they stayed behind.
 

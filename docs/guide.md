@@ -249,8 +249,8 @@ included ConverterPIX by mwl4.
    or DLC archives. Archives you always need can be added once with **Add Archives to List** and
    reordered or removed there.
 2. **Pick the model.** The next window shows the archives' folders. Browse to the model's `.pmg`
-   on the left. For an animated model, tick **Animations** on the right and tick the `.pma` files
-   to bring along.
+   on the left. For an animated model, browse to its `.pma` files on the right and click each one
+   to bring along: a click ticks or unticks it. Only ticked animations are converted.
 3. **Import.** Converted files go into your **SCS Project Base Path**, keeping their game folders,
    and the model is imported. **Only convert?** converts without importing. **Textures to Base?**
    puts textures into a sibling `base` folder, so they aren't packed into your mod.
