@@ -241,6 +241,104 @@ def fill_automat_sections(automats, automat_dict):
             sections.append(automat_section)
     return sections
 
+def _convert_inputs_to_effect(material, effect_name, input_sections):
+    """Convert legacy material inputs (old names, aux[n]) to the effect inputs of the newer format.
+
+    Used for materials with a shader preset and for "<imported>" materials alike: both can carry
+    old-format names (e.g. models converted with ConverterPIX, or effects without a preset such as
+    eut2.lamp), which the conversion tool doesn't accept in AutoMat.
+
+    :return: converted input sections
+    :rtype: list[tuple]
+    """
+    #######################################
+    ##### TEMPORARY CONVERSION STARTS #####
+    #######################################
+    # NOTE: Temporary conversion from old format (Material) to new one (effect/AutoMat).
+    # In future, new format will be defalut, and converter will be used in #pit.py (not here) instead, to convert from new to old.
+
+    # Building material_data (for converting attributes and values) and attribute_format (to assign correct formats for not converted data) dicts from input_sections
+    material_data = {attr: val for fmt, attr, val in input_sections}
+    attribute_format = {attr: fmt for fmt, attr, val in input_sections}
+
+    # Convert attributes and values from material_data to new effect format
+    converter = AttributeConverter()
+    effect_data = converter.material_to_effect(effect_name, material_data)
+
+    # Building new_input_sections with converted data and correct format of attributes.
+    new_input_sections = []
+    if isinstance(effect_data, dict):
+        for attr, val in effect_data.items():
+            # Checking if attribute was copied 1:1 from old format (not converted - fmt should be preserved)
+            if attr in attribute_format:
+                fmt = attribute_format[attr]
+                val_out = val
+
+            # If attribute was converted, we need to "guess" correct one from value (there is no 100% certainty)
+            else:
+                if isinstance(val, (tuple, list)):
+                    l = len(val)
+                    if l == 1:
+                        fmt = "FLOAT"
+                        val_out = val[0]
+                    else:
+                        fmt = f"FLOAT{l}"
+                        val_out = tuple(val)
+
+                elif isinstance(val, int):
+                    fmt = "INT"
+                    val_out = val
+
+                elif isinstance(val, str):
+                    fmt = "STRING"
+                    val_out = val
+
+                else:
+                    fmt = "FLOAT"
+                    val_out = val
+
+            new_input_sections.append((fmt, attr, val_out))
+    elif isinstance(effect_data, tuple) and len(effect_data) == 2:
+        attr, val = effect_data
+         # Checking if attribute was copied 1:1 from old format (not converted - fmt should be preserved)
+        if attr in attribute_format:
+            fmt = attribute_format[attr]
+            val_out = val
+
+        # If attribute was converted, we need to "guess" correct one from value (there is no 100% certainty)
+        else:
+            if isinstance(val, (tuple, list)):
+                l = len(val)
+                if l == 1:
+                    fmt = "FLOAT"
+                    val_out = val[0]
+                else:
+                    fmt = f"FLOAT{l}"
+                    val_out = tuple(val)
+
+            elif isinstance(val, int):
+                fmt = "INT"
+                val_out = val
+
+            elif isinstance(val, str):
+                fmt = "STRING"
+                val_out = val
+
+            else:
+                fmt = "FLOAT"
+                val_out = val
+
+        new_input_sections.append((fmt, attr, val_out))
+
+    # Replace old input_sections with new one (converted to effect)
+    input_sections = _clean_automat_inputs(material.name, new_input_sections)
+
+    #######################################
+    #####  TEMPORARY CONVERSION ENDS  #####
+    #######################################
+    return input_sections
+
+
 # OK
 def default_automat(alias):
     """Return 'default automat' data section."""
@@ -249,7 +347,7 @@ def default_automat(alias):
         ('FLOAT3',  "diffuse",      (1.0, 1.0, 1.0)),
         ('FLOAT3',  "specular",     (0.0, 0.0, 0.0)),
         ('FLOAT',   "shininess",    (5.0,)),
-        ('FLOAT',   "add_ambient",  (0.0,)),
+        ('FLOAT',   "additional_ambient",  (0.0,)),
         ('FLOAT',   "reflection",   (0.0,)),
     ]
 
@@ -657,91 +755,8 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         else:
                             input_sections.append((extra_format, extra_tag, tuple(extra_values)))
 
-                    #######################################
-                    ##### TEMPORARY CONVERSION STARTS #####
-                    #######################################
-                    # NOTE: Temporary conversion from old format (Material) to new one (effect/AutoMat).
-                    # In future, new format will be defalut, and converter will be used in #pit.py (not here) instead, to convert from new to old.
+                    input_sections = _convert_inputs_to_effect(material, effect_name, input_sections)
 
-                    # Building material_data (for converting attributes and values) and attribute_format (to assign correct formats for not converted data) dicts from input_sections
-                    material_data = {attr: val for fmt, attr, val in input_sections}
-                    attribute_format = {attr: fmt for fmt, attr, val in input_sections}
-
-                    # Convert attributes and values from material_data to new effect format
-                    converter = AttributeConverter()
-                    effect_data = converter.material_to_effect(effect_name, material_data)
-
-                    # Building new_input_sections with converted data and correct format of attributes.
-                    new_input_sections = []
-                    if isinstance(effect_data, dict):
-                        for attr, val in effect_data.items():
-                            # Checking if attribute was copied 1:1 from old format (not converted - fmt should be preserved)
-                            if attr in attribute_format:
-                                fmt = attribute_format[attr]
-                                val_out = val
-
-                            # If attribute was converted, we need to "guess" correct one from value (there is no 100% certainty)
-                            else:
-                                if isinstance(val, (tuple, list)):
-                                    l = len(val)
-                                    if l == 1:
-                                        fmt = "FLOAT"
-                                        val_out = val[0]
-                                    else:
-                                        fmt = f"FLOAT{l}"
-                                        val_out = tuple(val)
-
-                                elif isinstance(val, int):
-                                    fmt = "INT"
-                                    val_out = val
-
-                                elif isinstance(val, str):
-                                    fmt = "STRING"
-                                    val_out = val
-
-                                else:
-                                    fmt = "FLOAT"
-                                    val_out = val
-
-                            new_input_sections.append((fmt, attr, val_out))
-                    elif isinstance(effect_data, tuple) and len(effect_data) == 2:
-                        attr, val = effect_data
-                         # Checking if attribute was copied 1:1 from old format (not converted - fmt should be preserved)
-                        if attr in attribute_format:
-                            fmt = attribute_format[attr]
-                            val_out = val
-
-                        # If attribute was converted, we need to "guess" correct one from value (there is no 100% certainty)
-                        else:
-                            if isinstance(val, (tuple, list)):
-                                l = len(val)
-                                if l == 1:
-                                    fmt = "FLOAT"
-                                    val_out = val[0]
-                                else:
-                                    fmt = f"FLOAT{l}"
-                                    val_out = tuple(val)
-
-                            elif isinstance(val, int):
-                                fmt = "INT"
-                                val_out = val
-
-                            elif isinstance(val, str):
-                                fmt = "STRING"
-                                val_out = val
-
-                            else:
-                                fmt = "FLOAT"
-                                val_out = val
-
-                        new_input_sections.append((fmt, attr, val_out))
-
-                    # Replace old input_sections with new one (converted to effect)
-                    input_sections = _clean_automat_inputs(material.name, new_input_sections)
-
-                    #######################################
-                    #####  TEMPORARY CONVERSION ENDS  #####
-                    #######################################
 
                     automat_export_data = _SectionData("AutoMat")
                     automat_export_data.props.append(("Alias", material.name))
@@ -818,6 +833,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         # print('         > FINAL: %r - %r' % (tag_prop, tobj_rel_path))
                         sampler_sections.append((tag_prop, tobj_rel_path))
 
+                    input_sections = _convert_inputs_to_effect(material, effect_name, input_sections)
 
                     automat_export_data = _SectionData("AutoMat")
                     automat_export_data.props.append(("Alias", material.name))

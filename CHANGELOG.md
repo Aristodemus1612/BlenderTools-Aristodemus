@@ -2,6 +2,16 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.0d (2026-10-23), AutoMat material fix
+
+### Fixes
+- **Traffic lights and other preset-less materials convert with AutoMat.** Materials whose effect
+  has no shader preset in the add-on (for example the `eut2.lamp` traffic-light lenses) skipped the
+  conversion to the newer format, so AutoMat wrote old setting names (`add_ambient`, `aux[n]`) and
+  SCS's conversion tool stopped with "cannot read amat": the model's `.pmd` and collision weren't
+  written. They now get the same conversion as all other materials. The default material used for
+  faces without a material had the same problem.
+
 ## 2.5.0c (2026-10-23), prefab conversion fix
 
 ### Fixes
