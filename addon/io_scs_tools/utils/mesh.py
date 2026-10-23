@@ -124,12 +124,16 @@ def bm_make_faces(bm, faces, points_to_weld_list):
                     new_v_idx = points_to_weld_list[v_idx]
                 new_f_idx.append(new_v_idx)
 
+            # faces are compared by their welded vertex indices: the two sides of a double-sided surface
+            # often use separate vertices at the same position, which only become the same after welding
+            welded_key = tuple(new_f_idx)
+
             try:
 
                 bm.verts.ensure_lookup_table()
                 bm.faces.new([bm.verts[i] for i in new_f_idx])
                 new_faces.append(f_idx)
-                new_faces_dict[str(f_idx)] = True
+                new_faces_dict[welded_key] = True
 
             except ValueError:
                 lprint('D Face #%i vertex indices already used: %s', (f_idx_i, str(new_f_idx)))
@@ -137,16 +141,17 @@ def bm_make_faces(bm, faces, points_to_weld_list):
                 # with deque rotation we can determinate if current face
                 # is really reverse face of already existing,
                 # then we can add it as back face; otherwise we have to ignore it
-                f_idx_deque = deque(reversed(f_idx))
+                f_idx_deque = deque(reversed(new_f_idx))
                 f_idx_deque.rotate(-1)
 
-                for _ in range(len(f_idx)):
+                for _ in range(len(new_f_idx)):
                     f_idx_deque.rotate()
-                    f_idx_str = str(list(f_idx_deque))
-                    if f_idx_str in new_faces_dict and f_idx_str not in back_faces_dict:
+                    f_idx_key = tuple(f_idx_deque)
+                    if f_idx_key in new_faces_dict and f_idx_key not in back_faces_dict:
                         back_faces.append(f_idx)
-                        back_faces_dict[f_idx_str] = True
+                        back_faces_dict[f_idx_key] = True
                         lprint('D Face #%i is a reverse face, it will be added to extra back object.', (f_idx_i,))
+                        break
 
     return new_faces, back_faces
 

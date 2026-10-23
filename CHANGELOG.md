@@ -23,6 +23,8 @@ All notable changes to SCS Tools (Aristodemus).
 - **Double-sided surfaces keep their back faces.** When a model had faces that share their
   vertices with a face pointing the other way (fences, signs, foliage), the import put those back
   faces in a separate object that was never exported. They are now joined to their object again.
+  Back faces that use their own vertices at the same positions as the front face were thrown away
+  as duplicates on import; they are now recognised as back faces too.
 - **Spawn point flags are kept.** Only "Custom" spawn points read their depot type, parking
   difficulty, trailer length and rule on import, but every spawn point writes them on export, so
   the others came back with different flags (for example 0 became 1). They are now read for all
