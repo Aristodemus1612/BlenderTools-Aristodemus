@@ -20,6 +20,7 @@
 
 import bpy
 import os
+import re
 import shutil
 from . import tobj as _tobj
 from ..consts import Variant as _VARIANT_consts
@@ -70,6 +71,63 @@ def fill_global_section(looks, variants, parts, materials):
     section.props.append(("MaterialCount", materials))
     return section
 
+_AUX_NAME_RE = re.compile(r"^aux\[\d+\]$")
+
+# inputs the game leaves out of a material when they are at their default
+_OMIT_WHEN_ZERO = ("is_dynamic_road", "lod_switch_distance")
+
+# inputs the game defines as whole numbers (effect/def/inputs.sui, material_input_int)
+_INT_INPUTS = ("queue_bias", "heightmap_transition_shape_type", "heightmap_transition_shape_type_secondary",
+               "is_terrain_material", "is_dynamic_road")
+
+
+def _clean_automat_inputs(material_name, input_data):
+    """Make AutoMat inputs match what the game's own materials contain.
+
+    * INT inputs are written as whole numbers (``2``, not ``2.000000``);
+    * ``is_dynamic_road`` / ``lod_switch_distance`` are left out when 0, as in game materials;
+    * legacy ``aux[n]`` slots that have no newer name for this shader are not valid AutoMat
+      inputs, so they are left out with a warning instead of breaking the conversion.
+
+    :param material_name: material name for messages
+    :type material_name: str
+    :param input_data: list of (format, name, value) tuples
+    :type input_data: list[tuple]
+    :return: cleaned list
+    :rtype: list[tuple]
+    """
+    cleaned = []
+    for entry in input_data:
+        fmt, name, value = entry[:3]
+        rest = tuple(entry[3:])
+
+        if isinstance(name, str) and _AUX_NAME_RE.match(name):
+            lprint("W Material %r: attribute %r has no AutoMat name for this shader, leaving it out.",
+                   (material_name, name))
+            continue
+
+        if name in _INT_INPUTS:
+            fmt = "INT"
+
+        if fmt == "INT":
+            raw = value[0] if isinstance(value, (tuple, list)) and value else value
+            try:
+                value = int(round(float(raw)))
+            except (TypeError, ValueError):
+                value = 0
+
+        if name in _OMIT_WHEN_ZERO:
+            raw = value[0] if isinstance(value, (tuple, list)) and value else value
+            try:
+                if float(raw) == 0.0:
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        cleaned.append((fmt, name, value) + rest)
+    return cleaned
+
+
 # OK
 def _fill_content_sections(input_data, sampler_data, effect_name):
     """Builds SII content for "AutoMat" sections.
@@ -112,6 +170,13 @@ def _fill_content_sections(input_data, sampler_data, effect_name):
             "INT":      "xmat_input_int",
             "STRING":   "xmat_input_str"
         }
+
+        if typ == "INT" and not isinstance(value, int):
+            raw = value[0] if isinstance(value, (tuple, list)) and value else value
+            try:
+                value = int(round(float(raw)))
+            except (TypeError, ValueError):
+                pass
 
         unit_type = type_map.get(typ, "xmat_input_str")
         unit = _UnitData(unit_type, f".record{idx}")
@@ -672,7 +737,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         new_input_sections.append((fmt, attr, val_out))
 
                     # Replace old input_sections with new one (converted to effect)
-                    input_sections = new_input_sections
+                    input_sections = _clean_automat_inputs(material.name, new_input_sections)
 
                     #######################################
                     #####  TEMPORARY CONVERSION ENDS  #####
@@ -681,7 +746,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     automat_export_data = _SectionData("AutoMat")
                     automat_export_data.props.append(("Alias", material.name))
                     automat_export_data.props.append(("Index", automat_idx))
-                    content = _fill_content_sections(input_sections, sampler_sections, effect_name)
+                    content = _fill_content_sections(_clean_automat_inputs(material.name, input_sections), sampler_sections, effect_name)
                     automat_export_data.props.append(("Content", content))
 
 
@@ -757,7 +822,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     automat_export_data = _SectionData("AutoMat")
                     automat_export_data.props.append(("Alias", material.name))
                     automat_export_data.props.append(("Index", automat_idx))
-                    content = _fill_content_sections(input_sections, sampler_sections, effect_name)
+                    content = _fill_content_sections(_clean_automat_inputs(material.name, input_sections), sampler_sections, effect_name)
                     automat_export_data.props.append(("Content", content))
 
                 else:  # when user made material presets were there, but there is no preset library at export for some reason

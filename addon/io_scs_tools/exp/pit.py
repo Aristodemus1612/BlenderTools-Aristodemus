@@ -489,6 +489,13 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                 new_format_skipped.append(item_tag)
                                 continue
 
+                            # the conversion tool can't map "is_dynamic_road" from the legacy format at all;
+                            # it's only an issue worth a warning when it's actually turned on
+                            if item_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
+                                if _mat_attrs.get_attribute_value(material, item_tag, 0):
+                                    new_format_skipped.append(item_tag)
+                                continue
+
                             attribute_data = _SectionData("Attribute")
                             for rec in item.props:
                                 # print('       rec: %r' % str(rec))
@@ -510,6 +517,13 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         for aux_prop in aux_props:
                                             value.append(aux_prop.value)
 
+                                        # write exactly as many values as the format says: models converted with
+                                        # ConverterPIX carry 4 values in aux entries the game stores as 2 (e.g. mult
+                                        # UV scale), and a count that doesn't match the format stops the converter
+                                        component_count = {"FLOAT": 1, "FLOAT2": 2, "FLOAT3": 3, "FLOAT4": 4}.get(format_prop)
+                                        if component_count:
+                                            value = (value + [0.0] * component_count)[:component_count]
+
                                         # extract list if there is only one value inside and tagged as FLOAT
                                         # otherwise it gets saved as: "Value: ( [0.0] )" instead of: "Value: ( 0.0 )"
                                         if len(value) == 1 and format_prop == "FLOAT":
@@ -530,6 +544,10 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         # TEXTURES
                         elif item.type == "Texture":
                             # print('     Texture:')
+
+                            # heightmap textures belong to the heightmap flavour, which the legacy format can't carry
+                            if ".heightmap" in effect_name and item.get_prop("Tag")[1].split(":")[1].startswith("texture_heightmap"):
+                                continue
 
                             texture_data = _SectionData("Texture")
                             for rec in item.props:
@@ -556,6 +574,10 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         if _mat_attrs.is_new_format_only(extra_tag):
                             new_format_skipped.append(extra_tag)
                             continue
+                        if extra_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
+                            if any(extra_values):
+                                new_format_skipped.append(extra_tag)
+                            continue
                         attribute_data = _SectionData("Attribute")
                         attribute_data.props.append(("Format", extra_format))
                         attribute_data.props.append(("Tag", extra_tag))
@@ -571,12 +593,17 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     if new_format_skipped or ".heightmap" in effect_name:
                         lprint("W Material %r uses settings the legacy material format can't store:\n\t   "
                                "%s.\n\t   "
-                               "They were left out. Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
+                               "They were left out (and the heightmap flavour removed from the effect). "
+                               "Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
                                (material.name, ", ".join(sorted(set(new_format_skipped))) or "heightmap flavor"))
+
+                    # the legacy format can't carry the heightmap flavour: write the effect without it,
+                    # so the conversion tool accepts the material (edge blend is lost, see warning above)
+                    legacy_effect_name = effect_name.replace(".heightmap", "")
 
                     material_export_data = _SectionData("Material")
                     material_export_data.props.append(("Alias", material.name))
-                    material_export_data.props.append(("Effect", effect_name))
+                    material_export_data.props.append(("Effect", legacy_effect_name))
                     material_export_data.props.append(("Flags", flags))
                     material_export_data.props.append(("AttributeCount", attribute_cnt))
                     material_export_data.props.append(("TextureCount", texture_cnt))

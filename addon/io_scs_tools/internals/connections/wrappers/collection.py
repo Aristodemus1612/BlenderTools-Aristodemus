@@ -224,6 +224,10 @@ def get_curves(np_locators):
             next_curves = []
             for next_conn_key in locators[end_node][_core.OUT_CONNS]:
 
+                # only curves that are exported with this prefab can be linked
+                if next_conn_key not in conns_keys_dict:
+                    continue
+
                 next_conn_entry = connections[next_conn_key]
                 if next_conn_entry[_core.VALID]:
                     next_curves.append(next_conn_key)
@@ -231,6 +235,9 @@ def get_curves(np_locators):
             # find valid previous curves keys
             prev_curves = []
             for prev_conn_key in locators[start_node][_core.IN_CONNS]:
+
+                if prev_conn_key not in conns_keys_dict:
+                    continue
 
                 prev_conn_entry = connections[prev_conn_key]
                 if prev_conn_entry[_core.VALID]:
