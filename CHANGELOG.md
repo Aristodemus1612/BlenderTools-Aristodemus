@@ -22,6 +22,10 @@ All notable changes to SCS Tools (Aristodemus).
   - The legacy format could write more values than an `aux` setting holds (models converted with
     ConverterPIX carry four values where the game stores two, for example the mult UV scale on
     road materials). It now writes exactly as many values as the setting holds.
+  - AutoMat wrote old setting names (`add_ambient`, `aux[n]`) for materials whose effect has no
+    shader preset in the add-on, for example the `eut2.lamp` traffic-light lenses. Those
+    materials now get the same conversion as all others. The default material used for faces
+    without a material had the same problem.
 - **Prefab signs keep their model.** Sign models, semaphore profiles and trigger actions that
   aren't in the loaded sign / semaphore / trigger libraries used to be exported empty. They are
   now kept as imported.
