@@ -40,6 +40,10 @@ EXTRA_ATTRIBUTES_KEY = "scs_extra_attributes"
 NEW_FORMAT_ONLY_PREFIXES = ("heightmap_", "diffuse_secondary", "specular_secondary", "shininess_secondary",
                             "reflection_secondary", "is_terrain_material", "far_color", "far_specular_power")
 
+# attributes the legacy format can't carry either; left out silently when 0 (their default),
+# with the usual warning when set
+NEW_FORMAT_ONLY_WHEN_SET = ("is_dynamic_road",)
+
 
 def is_new_format_only(tag):
     """Tells if given attribute tag exists only in the newer (AutoMat) material format."""

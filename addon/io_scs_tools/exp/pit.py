@@ -489,6 +489,13 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                 new_format_skipped.append(item_tag)
                                 continue
 
+                            # the conversion tool can't map "is_dynamic_road" from the legacy format at all;
+                            # it's only an issue worth a warning when it's actually turned on
+                            if item_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
+                                if _mat_attrs.get_attribute_value(material, item_tag, 0):
+                                    new_format_skipped.append(item_tag)
+                                continue
+
                             attribute_data = _SectionData("Attribute")
                             for rec in item.props:
                                 # print('       rec: %r' % str(rec))
@@ -509,6 +516,13 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         value = []
                                         for aux_prop in aux_props:
                                             value.append(aux_prop.value)
+
+                                        # write exactly as many values as the format says: models converted with
+                                        # ConverterPIX carry 4 values in aux entries the game stores as 2 (e.g. mult
+                                        # UV scale), and a count that doesn't match the format stops the converter
+                                        component_count = {"FLOAT": 1, "FLOAT2": 2, "FLOAT3": 3, "FLOAT4": 4}.get(format_prop)
+                                        if component_count:
+                                            value = (value + [0.0] * component_count)[:component_count]
 
                                         # extract list if there is only one value inside and tagged as FLOAT
                                         # otherwise it gets saved as: "Value: ( [0.0] )" instead of: "Value: ( 0.0 )"
@@ -559,6 +573,10 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     for extra_format, extra_tag, extra_values in _mat_attrs.get_extra_attributes(material):
                         if _mat_attrs.is_new_format_only(extra_tag):
                             new_format_skipped.append(extra_tag)
+                            continue
+                        if extra_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
+                            if any(extra_values):
+                                new_format_skipped.append(extra_tag)
                             continue
                         attribute_data = _SectionData("Attribute")
                         attribute_data.props.append(("Format", extra_format))

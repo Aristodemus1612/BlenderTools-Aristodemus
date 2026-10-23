@@ -17,6 +17,11 @@ All notable changes to SCS Tools (Aristodemus).
   - The legacy (Material) format kept the edge-blend / heightmap flavour in the effect name, but
     it can't store its settings. The flavour and its heightmap textures are now left out, with a
     warning. Use AutoMat to keep them.
+  - The legacy format wrote `is_dynamic_road`, which the conversion tool can't read from that
+    format. It is now left out (with a warning when it's set). Use AutoMat to keep it.
+  - The legacy format could write more values than an `aux` setting holds (models converted with
+    ConverterPIX carry four values where the game stores two, for example the mult UV scale on
+    road materials). It now writes exactly as many values as the setting holds.
 - **Prefab signs keep their model.** Sign models, semaphore profiles and trigger actions that
   aren't in the loaded sign / semaphore / trigger libraries used to be exported empty. They are
   now kept as imported.
