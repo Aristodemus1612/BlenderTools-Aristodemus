@@ -20,6 +20,19 @@ All notable changes to SCS Tools (Aristodemus).
 - **Prefab signs keep their model.** Sign models, semaphore profiles and trigger actions that
   aren't in the loaded sign / semaphore / trigger libraries used to be exported empty. They are
   now kept as imported.
+- **Double-sided surfaces keep their back faces.** When a model had faces that share their
+  vertices with a face pointing the other way (fences, signs, foliage), the import put those back
+  faces in a separate object that was never exported. They are now joined to their object again.
+- **Spawn point flags are kept.** Only "Custom" spawn points read their depot type, parking
+  difficulty, trailer length and rule on import, but every spawn point writes them on export, so
+  the others came back with different flags (for example 0 became 1). They are now read for all
+  spawn points.
+- **Window interior materials export correctly.** Interior materials (`eut2.interior...`) wrote
+  their room size into the wrong setting. The room size, atlas size and glass colour now go to
+  the right settings.
+- **Prefab curves only link to curves of the same prefab.** In some cases (for example after
+  importing several prefabs into one file) export could stop with an error, or curves could be
+  linked to curves from another prefab.
 - **AutoMat is now the default export format.**
 
 ## 2.5.0b (2026-10-22), test release fix

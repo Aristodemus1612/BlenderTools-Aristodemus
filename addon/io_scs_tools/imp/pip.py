@@ -476,14 +476,19 @@ def _create_spawn_locator(
         locator.scs_props.locator_prefab_type = 'Spawn Point'
         locator.scs_props.locator_prefab_spawn_type = str(spawn_type)
 
-        # flags for custom spawn type
-
-        # check if Spawn Type = Custom (9)
-        if locator.scs_props.locator_prefab_spawn_type == str(_PL_consts.PSP.CUSTOM):
-            locator.scs_props.locator_prefab_custom_depot_type = str(spawn_flags & _PL_consts.PSPCF.DEPOT_TYPE_MASK)
-            locator.scs_props.locator_prefab_custom_parking_difficulty = str(spawn_flags & _PL_consts.PSPCF.DIFFICULTY_MASK)
-            locator.scs_props.locator_prefab_custom_lenght = str(spawn_flags & _PL_consts.PSPCF.LENGHT_MASK)
-            locator.scs_props.locator_prefab_custom_rule = str(spawn_flags & _PL_consts.PSPCF.TRAILER_MASK)
+        # spawn point flags (depot type, parking difficulty, trailer length and rule)
+        # They are read for every spawn type: the exporter always writes them, so leaving them at
+        # their defaults would change the flags of non-custom spawn points (e.g. 0 -> 1).
+        spawn_flags = int(spawn_flags or 0)
+        for prop_name, mask in (("locator_prefab_custom_depot_type", _PL_consts.PSPCF.DEPOT_TYPE_MASK),
+                                ("locator_prefab_custom_parking_difficulty", _PL_consts.PSPCF.DIFFICULTY_MASK),
+                                ("locator_prefab_custom_lenght", _PL_consts.PSPCF.LENGHT_MASK),
+                                ("locator_prefab_custom_rule", _PL_consts.PSPCF.TRAILER_MASK)):
+            try:
+                setattr(locator.scs_props, prop_name, str(spawn_flags & mask))
+            except TypeError:
+                lprint("W Spawn point %r has unknown flag value %s (mask %s), using default.",
+                       (spawn_name, spawn_flags & mask, hex(mask)))
 
     return locator
 

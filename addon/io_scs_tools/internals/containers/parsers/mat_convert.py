@@ -160,6 +160,13 @@ map_to_effect_far = {
     ],
 }
 
+# window interiors (eut2.interior...): room size, atlas size and glass colour
+map_to_effect_interior = {
+    "aux[0]": [AttributeConvert("interior_unit_room_dimensions", 2, 0)],
+    "aux[1]": [AttributeConvert("interior_atlas_dimensions", 2, 0)],
+    "aux[2]": [AttributeConvert("interior_glass_color", 4, 0)],
+}
+
 # alpha-modulated decal blending (eut2.dif.spec.amod.dif.spec...)
 map_to_effect_amod = {
     "aux[0]": [AttributeConvert("amod_decal_blending_factors", 2, 0)],
@@ -350,7 +357,14 @@ class AttributeConverter:
         # "light.tex" was simplified to "light" due to new shader without ".tex" part.
         # Added "day" and "lit" cause it's also used instead of "night" flavor.
         if "light" in effect or "day" in effect or "lit" in effect or "night" in effect or "flare" in effect or "unlit" in effect or ".lum" in effect:
-            maps_to_check.append(map_to_effect_light)
+            if effect.startswith("eut2.interior"):
+                # interiors use aux[0] for the room size, only the luminance (aux[5]) comes from the light map
+                maps_to_check.append({"aux[5]": map_to_effect_light["aux[5]"]})
+            else:
+                maps_to_check.append(map_to_effect_light)
+
+        if effect.startswith("eut2.interior"):
+            maps_to_check.append(map_to_effect_interior)
 
         if "water" in effect:
             maps_to_check.append(map_to_effect_water)

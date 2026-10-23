@@ -635,8 +635,17 @@ def _create_piece(
         back_obj.data = _mesh_utils.bm_delete_loose(back_obj.data)
 
         # finally join back object with original
-        with context.temp_override(active_object=obj, selected_editable_objects=back_obj):
+        # (the override needs lists of objects; with a single object the join silently did nothing,
+        # which left the back faces in an unparented object that was never exported)
+        back_obj_name = back_obj.name
+        joined_objs = [obj, back_obj]
+        with context.temp_override(active_object=obj, object=obj,
+                                   selected_objects=joined_objs, selected_editable_objects=joined_objs):
             bpy.ops.object.join()
+
+        if back_obj_name in bpy.data.objects:
+            lprint("E Back faces of object %r couldn't be joined to it, they are kept in object %r.",
+                   (obj.name, back_obj_name))
 
     return obj
 
