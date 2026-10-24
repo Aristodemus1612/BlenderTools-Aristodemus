@@ -38,11 +38,12 @@ map_to_material = {
     "specular_secondary": [AttributeConvert("aux[3]", 4, 0)],
     "shininess_secondary": [AttributeConvert("aux[3]", 4, 3)],
     "reflection_secondary": [AttributeConvert("reflection2", 1, 0)],
-    "lod_selector": [AttributeConvert("aux[1]", 1, 0)],
+    "lod_selector": [AttributeConvert("aux[1]", 3, 0)],
     "shadow_offset": [AttributeConvert("aux[0]", 1, 0)],
     "amod_decal_blending_factors": [AttributeConvert("aux[0]", 2, 0)],
     "texgen_0_gen": [AttributeConvert("aux[0]", 4, 0)],
     "texgen_0_rot": [AttributeConvert("aux[0]", 4, 2)],
+    "lod_switch_distance": [AttributeConvert("aux[0]", 4, 3)],
     "texgen_1_gen": [AttributeConvert("aux[1]", 4, 0)],
     "texgen_1_rot": [AttributeConvert("aux[1]", 4, 2)],
     "far_color": [AttributeConvert("aux[2]", 4, 0)],
@@ -357,8 +358,9 @@ class AttributeConverter:
         # "light.tex" was simplified to "light" due to new shader without ".tex" part.
         # Added "day" and "lit" cause it's also used instead of "night" flavor.
         if "light" in effect or "day" in effect or "lit" in effect or "night" in effect or "flare" in effect or "unlit" in effect or ".lum" in effect:
-            if effect.startswith("eut2.interior"):
-                # interiors use aux[0] for the room size, only the luminance (aux[5]) comes from the light map
+            if effect.startswith("eut2.interior") or any(f in effect for f in (".flipsheet", ".fadesheet", ".sun")):
+                # interiors use aux[0] for the room size and animated sheets (e.g. eut2.flare.sun.bounce) for
+                # the sheet setup, so only the luminance (aux[5]) comes from the light map
                 maps_to_check.append({"aux[5]": map_to_effect_light["aux[5]"]})
             else:
                 maps_to_check.append(map_to_effect_light)

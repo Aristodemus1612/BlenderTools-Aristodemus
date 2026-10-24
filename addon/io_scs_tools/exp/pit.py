@@ -431,6 +431,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                 # MATERIAL EFFECT
                 effect_name = material.scs_props.mat_effect_name
                 _mat_attrs.warn_unsupported_flavors(material.name, effect_name)
+                legacy_unsupported_aux = _mat_attrs.get_legacy_unsupported_aux(effect_name)
 
                 # PRESET SHADERS
                 flags = 0
@@ -486,7 +487,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             # attributes of the newer material format can't be written to the legacy one
                             item_tag = item.get_prop_value("Tag")
-                            if item_tag and _mat_attrs.is_new_format_only(item_tag):
+                            if item_tag and (_mat_attrs.is_new_format_only(item_tag) or item_tag in legacy_unsupported_aux):
                                 new_format_skipped.append(item_tag)
                                 continue
 
@@ -524,6 +525,11 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         component_count = {"FLOAT": 1, "FLOAT2": 2, "FLOAT3": 3, "FLOAT4": 4}.get(format_prop)
                                         if component_count:
                                             value = (value + [0.0] * component_count)[:component_count]
+
+                                        # the far colour is stored as 0-255 values in the legacy format
+                                        aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, item_tag)
+                                        if aux_scale != 1.0:
+                                            value = [v * aux_scale for v in value]
 
                                         # extract list if there is only one value inside and tagged as FLOAT
                                         # otherwise it gets saved as: "Value: ( [0.0] )" instead of: "Value: ( 0.0 )"
@@ -572,13 +578,16 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                     # attributes kept outside of the preset on import (newer material format)
                     for extra_format, extra_tag, extra_values in _mat_attrs.get_extra_attributes(material):
-                        if _mat_attrs.is_new_format_only(extra_tag):
+                        if _mat_attrs.is_new_format_only(extra_tag) or extra_tag in legacy_unsupported_aux:
                             new_format_skipped.append(extra_tag)
                             continue
                         if extra_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
                             if any(extra_values):
                                 new_format_skipped.append(extra_tag)
                             continue
+                        aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, extra_tag)
+                        if aux_scale != 1.0:
+                            extra_values = [v * aux_scale for v in extra_values]
                         attribute_data = _SectionData("Attribute")
                         attribute_data.props.append(("Format", extra_format))
                         attribute_data.props.append(("Tag", extra_tag))
@@ -624,11 +633,12 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     attribute_sections = []
                     for attribute_dict in material_attributes:
                         attr_tag = attribute_dict.get("Tag", "")
-                        if _mat_attrs.is_new_format_only(attr_tag):
+                        if _mat_attrs.is_new_format_only(attr_tag) or attr_tag in legacy_unsupported_aux:
                             imported_skipped.append(attr_tag)
                             continue
                         if attr_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
-                            if _mat_attrs.get_attribute_value(material, attr_tag, 0):
+                            set_value = _mat_attrs.get_attribute_value(material, attr_tag, attribute_dict.get("Value", 0))
+                            if any(set_value) if isinstance(set_value, (list, tuple)) else set_value:
                                 imported_skipped.append(attr_tag)
                             continue
 
@@ -655,9 +665,11 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         value = [value]
 
                                 if value is None:
-                                    attribute_section.props.append((attr_prop, ["i", tuple(attribute_dict[attr_prop])]))
-                                else:
-                                    attribute_section.props.append((attr_prop, ["i", tuple(value)]))
+                                    value = list(attribute_dict[attr_prop])
+                                aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, attr_tag)
+                                if aux_scale != 1.0:
+                                    value = [v * aux_scale for v in value]
+                                attribute_section.props.append((attr_prop, ["i", tuple(value)]))
 
                             elif attr_prop == "Tag" and "aux" in attribute_dict[attr_prop]:
                                 attribute_section.props.append((attr_prop, "aux[" + attribute_dict[attr_prop][3:] + "]"))

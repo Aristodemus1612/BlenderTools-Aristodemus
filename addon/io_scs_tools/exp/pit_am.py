@@ -74,7 +74,7 @@ def fill_global_section(looks, variants, parts, materials):
 _AUX_NAME_RE = re.compile(r"^aux\[\d+\]$")
 
 # inputs the game leaves out of a material when they are at their default
-_OMIT_WHEN_ZERO = ("is_dynamic_road", "lod_switch_distance")
+_OMIT_WHEN_ZERO = ("is_dynamic_road", "lod_switch_distance", "animsheet_cfg_loop_offset_rnd")
 
 # inputs the game defines as whole numbers (effect/def/inputs.sui, material_input_int)
 _INT_INPUTS = ("queue_bias", "heightmap_transition_shape_type", "heightmap_transition_shape_type_secondary",
@@ -85,7 +85,8 @@ def _clean_automat_inputs(material_name, input_data):
     """Make AutoMat inputs match what the game's own materials contain.
 
     * INT inputs are written as whole numbers (``2``, not ``2.000000``);
-    * ``is_dynamic_road`` / ``lod_switch_distance`` are left out when 0, as in game materials;
+    * ``is_dynamic_road`` / ``lod_switch_distance`` / ``animsheet_cfg_loop_offset_rnd`` are left out when 0,
+      as in game materials (the conversion tools can't read the last one, so it gets a warning when set);
     * legacy ``aux[n]`` slots that have no newer name for this shader are not valid AutoMat
       inputs, so they are left out with a warning instead of breaking the conversion.
 
@@ -123,6 +124,9 @@ def _clean_automat_inputs(material_name, input_data):
                     continue
             except (TypeError, ValueError):
                 pass
+
+        if name in _mat_attrs.INPUTS_UNSUPPORTED_BY_CONVERSION_TOOLS:
+            _mat_attrs.warn_unsupported_input(material_name, name)
 
         cleaned.append((fmt, name, value) + rest)
     return cleaned

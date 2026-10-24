@@ -20,6 +20,7 @@
 
 from ..utils import name as _name_utils
 from ..utils.printout import lprint
+from ..utils import mat_attrs as _mat_attrs
 from ..internals.containers import pix as _pix_container
 from ..internals.structure import SectionData as _SectionData
 
@@ -191,7 +192,73 @@ def _automat_to_material_section(automat_section):
     return material
 
 
-def _get_look(section):
+def _lin2s(x):
+    """Linear to sRGB, as ConverterPIX does it for colours it knows (src/prerequisites.cpp)."""
+    a = 0.055
+    return x * 12.92 if x <= 0.0031308 else (1.0 + a) * pow(x, 1.0 / 2.4) - a
+
+
+def _fix_converter_pix_colors(material_section):
+    """ConverterPIX turns colours of the game materials back to sRGB, as SCS's conversion tools expect
+    them, but only for the colours it knows (diffuse, specular, ...). The far colour of terrain-style
+    materials (aux[2]) and diffuse_secondary are left linear, so after conversion they came out far too dark
+    (e.g. 0.10 became 0.01). Convert them the same way ConverterPIX converts the other colours.
+
+    :param material_section: legacy "Material" section from a PIT file written by ConverterPIX
+    :type material_section: io_scs_tools.internals.structure.SectionData
+    """
+    effect = material_section.get_prop_value("Effect") or ""
+    color_tags = {"diffuse_secondary": 3}
+    if _mat_attrs.uses_far_color(effect):
+        color_tags["aux[2]"] = 3   # far_color; the 4th value is far_specular_power
+
+    for attr in material_section.sections:
+        if attr.type != "Attribute":
+            continue
+        tag = attr.get_prop_value("Tag")
+        if tag not in color_tags:
+            continue
+        for i, prop in enumerate(attr.props):
+            if prop[0] != "Value" or not isinstance(prop[1], (list, tuple)):
+                continue
+            values = list(prop[1])
+            count = min(color_tags[tag], len(values))
+            try:
+                colors = [float(v) for v in values[:count]]
+            except (TypeError, ValueError):
+                break
+            max_val = max(colors + [0.0])
+            if max_val <= 1.0:
+                colors = [_lin2s(v) for v in colors]
+            else:
+                colors = [_lin2s(v / max_val) * max_val for v in colors]
+            attr.props[i] = [prop[0], tuple(colors + values[count:])]
+            break
+
+
+def _scale_legacy_far_color(material_section):
+    """The legacy format stores the far colour and far specular power (aux[2]) as 0-255 values;
+    the add-on keeps them as 0-1, like the newer format and ConverterPIX do.
+
+    :param material_section: legacy "Material" section
+    :type material_section: io_scs_tools.internals.structure.SectionData
+    """
+    effect = material_section.get_prop_value("Effect") or ""
+    scale = _mat_attrs.get_legacy_aux_scale(effect, "aux[2]")
+    if scale == 1.0:
+        return
+    for attr in material_section.sections:
+        if attr.type == "Attribute" and attr.get_prop_value("Tag") == "aux[2]":
+            for i, prop in enumerate(attr.props):
+                if prop[0] == "Value" and isinstance(prop[1], (list, tuple)):
+                    try:
+                        attr.props[i] = [prop[0], tuple(float(v) / scale for v in prop[1])]
+                    except (TypeError, ValueError):
+                        pass
+                    break
+
+
+def _get_look(section, from_converter_pix=False):
     """Receives a Look section and returns its properties in its own variables.
     For any item that fails to be found, it returns None."""
     look_name = None
@@ -205,7 +272,8 @@ def _get_look(section):
     look_mat_settings = {}
 
     # newer material format: "AutoMat" entries are converted to legacy "Material" sections
-    if any(sec.type == "AutoMat" for sec in section.sections):
+    from_automat = any(sec.type == "AutoMat" for sec in section.sections)
+    if from_automat:
         converted = []
         for sec in section.sections:
             if sec.type == "AutoMat":
@@ -217,6 +285,10 @@ def _get_look(section):
 
     for sec in section.sections:
         if sec.type == "Material":
+            if from_converter_pix:
+                _fix_converter_pix_colors(sec)
+            elif not from_automat:
+                _scale_legacy_far_color(sec)
             mat_alias = mat_effect = mat_flags = attribute_count = texture_count = None
             attributes = {}
             textures = {}
@@ -491,12 +563,16 @@ def load(filepath):
     (look_count, variant_count, part_count, material_count) = _get_global(pit_container, dump_level)
     '''
 
+    # files written by ConverterPIX (models converted from the game archives) need some colours converted
+    source = _get_header(pit_container)[1]
+    from_converter_pix = isinstance(source, str) and source.startswith("ConverterPIX")
+
     # LOAD LOOKS AND VARIANTS
     loaded_looks = []
     loaded_variants = []
     for section in pit_container:
         if section.type == 'Look':
-            look_name, look_mat_settings = _get_look(section)
+            look_name, look_mat_settings = _get_look(section, from_converter_pix)
             look_record = (look_name, look_mat_settings)
             loaded_looks.append(look_record)
         elif section.type == 'Variant':
