@@ -292,6 +292,7 @@ Open an issue in the [Issues](../../issues) tab and include:
 | **Michal (Michaleczeq)** | The unofficial fork this update is built on |
 | **Simon Lusenc (50keda)** | ConverterPIX Wrapper, the base of the game archive importer |
 | **mwl4** | ConverterPIX, included for bringing game models into Blender |
+| **[IcemanRU](https://forum.scssoft.com/memberlist.php?mode=viewprofile&u=478774)** | Testing and bug reports |
 | **Aristodemus** | This update |
 
 ## Licence
