@@ -31,7 +31,7 @@ import shutil
 from sys import platform
 from sys import maxsize
 from tempfile import mkdtemp
-from bpy.props import StringProperty, CollectionProperty, IntProperty, BoolProperty, PointerProperty, FloatProperty
+from bpy.props import StringProperty, CollectionProperty, IntProperty, BoolProperty, PointerProperty, FloatProperty, EnumProperty
 from bpy_extras.io_utils import ImportHelper
 
 # ConverterPIX executables bundled with the add-on (bin/<platform>/)
@@ -256,6 +256,21 @@ def get_archive_listdir(file_paths, current_subpath):
     return sorted(dirs), sorted(files)
 
 
+# sizes of the archive browser dialog: (identifier, name, dialog width in UI units, list rows)
+BROWSER_SIZES = (
+    ("NORMAL", "Normal", 25, 20),
+    ("LARGE", "Large", 40, 26),
+    ("XLARGE", "Extra Large", 58, 32),
+)
+
+
+def _browser_size(identifier):
+    for size in BROWSER_SIZES:
+        if size[0] == identifier:
+            return size
+    return BROWSER_SIZES[0]
+
+
 # ### PROPERTIES ###
 
 
@@ -420,14 +435,61 @@ class SCS_TOOLS_UL_ConvPIXFileEntry(bpy.types.UIList):
         else:
             icon = "FILE_BLANK"
 
-        split_line = layout.split(factor=0.8)
-        split_line.prop(item, "name", text="", emboss=False, icon=icon)
+        split_line = layout.split(factor=0.8 if data.multi_select else 1.0)
+
+        # drawn as a button so hovering an entry shows its full name and path in a tooltip
+        # (long names are cut off in the list); clicking it selects it like clicking the list row
+        entry_row = split_line.row()
+        entry_row.alignment = "LEFT"
+        entry_row.context_pointer_set("scs_convpix_browser", data)
+        props = entry_row.operator(SCS_TOOLS_OT_ConvPIXBrowserEntry.bl_idname, text=item.name, icon=icon, emboss=False)
+        props.index = index
+        if item.name == "..":
+            props.tooltip = "Go up to %s" % (os.path.dirname(data.current_subpath) if data.current_subpath != "/" else "/")
+        else:
+            props.tooltip = "%s\n%s" % (item.name, path_join(data.current_subpath, item.name))
 
         if data.multi_select and not item.is_dir:
 
             row = split_line.row()
             row.alignment = "RIGHT"
             row.label(text="", icon="CHECKBOX_HLT" if item.do_import else "CHECKBOX_DEHLT")
+
+
+class SCS_TOOLS_OT_ConvPIXBrowserEntry(bpy.types.Operator):
+    bl_idname = "scs_tools.converter_pix_browser_entry"
+    bl_label = "Archive Entry"
+    bl_options = {'INTERNAL'}
+
+    index: IntProperty(options={'HIDDEN', 'SKIP_SAVE'})
+    tooltip: StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
+
+    @classmethod
+    def description(cls, context, properties):
+        return properties.tooltip
+
+    def execute(self, context):
+        browser_data = getattr(context, "scs_convpix_browser", None)
+        if browser_data is None:
+            return {'CANCELLED'}
+
+        # same as clicking the list row: opens a folder, selects the model or ticks an animation
+        browser_data.active_entry = self.index
+        return {'FINISHED'}
+
+
+class SCS_TOOLS_OT_ConvPIXBrowserSize(bpy.types.Operator):
+    bl_idname = "scs_tools.converter_pix_browser_size"
+    bl_label = "Resize Archive Browser"
+    bl_description = "Make the archive browser larger or smaller (the size is kept for the next import)"
+    bl_options = {'INTERNAL'}
+
+    size: EnumProperty(items=[(s[0], s[1], "") for s in BROWSER_SIZES], options={'HIDDEN', 'SKIP_SAVE'})
+
+    def execute(self, context):
+        # the dialog reads the size on every redraw, so it grows or shrinks right away
+        SCS_TOOLS_OT_ConvPIXListImport.set_size(self.size)
+        return {'FINISHED'}
 
 
 class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
@@ -438,6 +500,15 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
     __static_last_model_subpath = "/"
     __static_last_anim_subpath = "/"
     __static_browsers_slider = 0.5
+    __static_last_size = "NORMAL"
+
+    @classmethod
+    def set_size(cls, size):
+        cls.__static_last_size = size
+
+    @classmethod
+    def get_size(cls):
+        return cls.__static_last_size
 
     archive_paths: CollectionProperty(
         description="Paths to archives from which directories and files should be listed.",
@@ -597,7 +668,24 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         split_factor = 0.5
 
         archive_names = [os.path.basename(archive_path.name) for archive_path in self.archive_paths]
-        layout.label(text="Currently working upon: %r." % archive_names)
+        size_id, size_name, width_units, list_rows = _browser_size(SCS_TOOLS_OT_ConvPIXListImport.get_size())
+        size_index = [s[0] for s in BROWSER_SIZES].index(size_id)
+
+        # dialog width follows the chosen size and changes as soon as it's switched
+        layout.ui_units_x = width_units
+
+        header_row = layout.row()
+        header_row.label(text="Currently working upon: %r." % archive_names)
+        size_row = header_row.row(align=True)
+        size_row.alignment = "RIGHT"
+        smaller = size_row.row(align=True)
+        smaller.enabled = size_index > 0
+        props = smaller.operator(SCS_TOOLS_OT_ConvPIXBrowserSize.bl_idname, text="", icon="ZOOM_OUT")
+        props.size = BROWSER_SIZES[max(size_index - 1, 0)][0]
+        larger = size_row.row(align=True)
+        larger.enabled = size_index < len(BROWSER_SIZES) - 1
+        props = larger.operator(SCS_TOOLS_OT_ConvPIXBrowserSize.bl_idname, text="", icon="ZOOM_IN")
+        props.size = BROWSER_SIZES[min(size_index + 1, len(BROWSER_SIZES) - 1)][0]
 
 
         browser_layout = layout.split(factor=split_factor)
@@ -619,8 +707,8 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
             propname="file_entries",
             active_dataptr=self.model_browser_data,
             active_propname="active_entry",
-            rows=20,
-            maxrows=20,
+            rows=list_rows,
+            maxrows=list_rows,
         )
 
         # right browser
@@ -643,8 +731,8 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
             propname="file_entries",
             active_dataptr=self.anim_browser_data,
             active_propname="active_entry",
-            rows=20,
-            maxrows=20,
+            rows=list_rows,
+            maxrows=list_rows,
         )
 
 
@@ -912,6 +1000,8 @@ classes = (
     SCSConvPIXArchiveToUse,
 
     SCS_TOOLS_UL_ConvPIXFileEntry,
+    SCS_TOOLS_OT_ConvPIXBrowserEntry,
+    SCS_TOOLS_OT_ConvPIXBrowserSize,
     SCS_TOOLS_OT_ConvPIXListImport,
     SCS_TOOLS_OT_ConvPIXImport,
     SCS_TOOLS_OT_ConvPIXUpdate,

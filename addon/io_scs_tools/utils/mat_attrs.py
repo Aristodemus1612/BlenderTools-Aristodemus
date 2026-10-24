@@ -42,7 +42,69 @@ NEW_FORMAT_ONLY_PREFIXES = ("heightmap_", "diffuse_secondary", "specular_seconda
 
 # attributes the legacy format can't carry either; left out silently when 0 (their default),
 # with the usual warning when set
-NEW_FORMAT_ONLY_WHEN_SET = ("is_dynamic_road",)
+NEW_FORMAT_ONLY_WHEN_SET = ("is_dynamic_road", "animsheet_cfg_loop_offset_rnd")
+
+# inputs used by newer game materials that SCS's public conversion tools (2.21) don't know in either
+# material format ("unable to convert attribute ... to new input id" / "cannot read amat"); the game
+# leaves them out when 0, so they are left out then, and kept with a warning otherwise
+INPUTS_UNSUPPORTED_BY_CONVERSION_TOOLS = ("animsheet_cfg_loop_offset_rnd",)
+
+# aux slots the public conversion tools (2.21) can't map from the legacy format for some effect
+# families, although the AutoMat format carries them ("Effect ... does not support aux[0] input")
+LEGACY_AUX_UNSUPPORTED_BY_CONVERSION_TOOLS = {
+    "eut2.dif.spec.amod.dif.spec.add.env": ("aux[0]",),   # amod_decal_blending_factors
+}
+
+# effect flavours used by newer game materials that SCS's public conversion tools (2.21) can't decode;
+# such materials stop the conversion of the model's .pmd ("Unable to decode all flavors from effect")
+FLAVORS_UNSUPPORTED_BY_CONVERSION_TOOLS = ("fmtsnmapcalc",)
+
+
+def warn_unsupported_flavors(material_name, effect_name):
+    """Warn when the effect uses a flavour the public conversion tools can't convert."""
+    from io_scs_tools.utils.printout import lprint
+    flavors = effect_name.split(".")
+    unsupported = [f for f in FLAVORS_UNSUPPORTED_BY_CONVERSION_TOOLS if f in flavors]
+    if unsupported:
+        lprint("W Material %r uses the %s flavour, which SCS's conversion tools (2.21) can't convert yet: "
+               "the model's .pmd won't be written. Change the material's effect to a supported flavour "
+               "(e.g. 'tsnmapcalc' instead of 'fmtsnmapcalc') if you need to convert it.",
+               (material_name, ", ".join(unsupported)))
+
+
+def uses_far_color(effect_name):
+    """Tells if aux[2] of given effect holds the far colour + far specular power (terrain-style materials
+    with texture generation), the same rule the AutoMat conversion uses (mat_convert.map_to_effect_far)."""
+    return (("tg0" in effect_name or "tg1" in effect_name) and "water" not in effect_name
+            and not effect_name.startswith("eut2.interior"))
+
+
+# the legacy format stores the far colour (sRGB) and far specular power in aux[2] as 0-255 values,
+# while the newer format (and the add-on) uses 0-1: the conversion tools divide aux[2] by 255
+LEGACY_FAR_COLOR_SCALE = 255.0
+
+
+def get_legacy_aux_scale(effect_name, tag):
+    """Factor the value of given aux tag is multiplied with when written to the legacy format."""
+    if tag in ("aux[2]", "aux2") and uses_far_color(effect_name):
+        return LEGACY_FAR_COLOR_SCALE
+    return 1.0
+
+
+def get_legacy_unsupported_aux(effect_name):
+    """Aux tags the legacy format can't carry for given effect, because the conversion tools can't map them."""
+    for family, tags in LEGACY_AUX_UNSUPPORTED_BY_CONVERSION_TOOLS.items():
+        if effect_name == family or effect_name.startswith(family + "."):
+            return tags
+    return ()
+
+
+def warn_unsupported_input(material_name, tag):
+    """Warn about an input the public conversion tools can't convert, which is kept on export."""
+    from io_scs_tools.utils.printout import lprint
+    lprint("W Material %r uses the %r setting, which SCS's conversion tools (2.21) can't convert yet: "
+           "the model's .pmd won't be written. Set it to 0 if you need to convert the model.",
+           (material_name, tag))
 
 
 def is_new_format_only(tag):

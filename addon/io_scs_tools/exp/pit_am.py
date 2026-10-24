@@ -74,7 +74,7 @@ def fill_global_section(looks, variants, parts, materials):
 _AUX_NAME_RE = re.compile(r"^aux\[\d+\]$")
 
 # inputs the game leaves out of a material when they are at their default
-_OMIT_WHEN_ZERO = ("is_dynamic_road", "lod_switch_distance")
+_OMIT_WHEN_ZERO = ("is_dynamic_road", "lod_switch_distance", "animsheet_cfg_loop_offset_rnd")
 
 # inputs the game defines as whole numbers (effect/def/inputs.sui, material_input_int)
 _INT_INPUTS = ("queue_bias", "heightmap_transition_shape_type", "heightmap_transition_shape_type_secondary",
@@ -85,7 +85,8 @@ def _clean_automat_inputs(material_name, input_data):
     """Make AutoMat inputs match what the game's own materials contain.
 
     * INT inputs are written as whole numbers (``2``, not ``2.000000``);
-    * ``is_dynamic_road`` / ``lod_switch_distance`` are left out when 0, as in game materials;
+    * ``is_dynamic_road`` / ``lod_switch_distance`` / ``animsheet_cfg_loop_offset_rnd`` are left out when 0,
+      as in game materials (the conversion tools can't read the last one, so it gets a warning when set);
     * legacy ``aux[n]`` slots that have no newer name for this shader are not valid AutoMat
       inputs, so they are left out with a warning instead of breaking the conversion.
 
@@ -123,6 +124,9 @@ def _clean_automat_inputs(material_name, input_data):
                     continue
             except (TypeError, ValueError):
                 pass
+
+        if name in _mat_attrs.INPUTS_UNSUPPORTED_BY_CONVERSION_TOOLS:
+            _mat_attrs.warn_unsupported_input(material_name, name)
 
         cleaned.append((fmt, name, value) + rest)
     return cleaned
@@ -671,6 +675,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                 # MATERIAL EFFECT
                 effect_name = material.scs_props.mat_effect_name
+                _mat_attrs.warn_unsupported_flavors(material.name, effect_name)
 
                 # PRESET SHADERS
                 input_sections = []     # (FORMAT, tag, value)
@@ -777,6 +782,8 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         # print('     Attribute:')
 
                         format_prop = ""
+                        tag_prop = attribute_dict.get("Tag", "")
+                        value = None
                         for attr_prop in sorted(attribute_dict.keys()):
 
                             # get the format of current attribute (we assume that "Format" attribute is before "Value" attribute in this for loop)
@@ -802,6 +809,14 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             elif attr_prop in ("FriendlyTag", "RequiredFlavors", "ForbiddenFlavors"):
                                 continue
+
+                        # substance is kept in the material's substance setting and written from there (above)
+                        if tag_prop == "substance":
+                            continue
+
+                        if value is None:
+                            lprint("W Material %r: attribute %r has no value, skipping it on export.", (material.name, tag_prop))
+                            continue
 
                         if format_prop not in ("FLOAT", "INT", "INT2", "STRING"):
                             value = tuple(value)

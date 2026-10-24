@@ -430,6 +430,8 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                 # MATERIAL EFFECT
                 effect_name = material.scs_props.mat_effect_name
+                _mat_attrs.warn_unsupported_flavors(material.name, effect_name)
+                legacy_unsupported_aux = _mat_attrs.get_legacy_unsupported_aux(effect_name)
 
                 # PRESET SHADERS
                 flags = 0
@@ -485,7 +487,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             # attributes of the newer material format can't be written to the legacy one
                             item_tag = item.get_prop_value("Tag")
-                            if item_tag and _mat_attrs.is_new_format_only(item_tag):
+                            if item_tag and (_mat_attrs.is_new_format_only(item_tag) or item_tag in legacy_unsupported_aux):
                                 new_format_skipped.append(item_tag)
                                 continue
 
@@ -523,6 +525,11 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         component_count = {"FLOAT": 1, "FLOAT2": 2, "FLOAT3": 3, "FLOAT4": 4}.get(format_prop)
                                         if component_count:
                                             value = (value + [0.0] * component_count)[:component_count]
+
+                                        # the far colour is stored as 0-255 values in the legacy format
+                                        aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, item_tag)
+                                        if aux_scale != 1.0:
+                                            value = [v * aux_scale for v in value]
 
                                         # extract list if there is only one value inside and tagged as FLOAT
                                         # otherwise it gets saved as: "Value: ( [0.0] )" instead of: "Value: ( 0.0 )"
@@ -571,13 +578,16 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                     # attributes kept outside of the preset on import (newer material format)
                     for extra_format, extra_tag, extra_values in _mat_attrs.get_extra_attributes(material):
-                        if _mat_attrs.is_new_format_only(extra_tag):
+                        if _mat_attrs.is_new_format_only(extra_tag) or extra_tag in legacy_unsupported_aux:
                             new_format_skipped.append(extra_tag)
                             continue
                         if extra_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
                             if any(extra_values):
                                 new_format_skipped.append(extra_tag)
                             continue
+                        aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, extra_tag)
+                        if aux_scale != 1.0:
+                            extra_values = [v * aux_scale for v in extra_values]
                         attribute_data = _SectionData("Attribute")
                         attribute_data.props.append(("Format", extra_format))
                         attribute_data.props.append(("Tag", extra_tag))
@@ -617,14 +627,21 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                     material_attributes = material['scs_shader_attributes']['attributes'].to_dict().values()
                     material_textures = material['scs_shader_attributes']['textures'].to_dict().values()
 
-                    material_export_data = _SectionData("Material")
-                    material_export_data.props.append(("Alias", material.name))
-                    material_export_data.props.append(("Effect", effect_name))
-                    material_export_data.props.append(("Flags", int(not material.scs_props.enable_aliasing)))
-                    material_export_data.props.append(("AttributeCount", len(material_attributes)))
-                    material_export_data.props.append(("TextureCount", len(material_textures)))
-
+                    # the legacy format can't carry the heightmap flavour nor settings of the newer material format:
+                    # leave them out like for materials with a shader preset, so the conversion tool accepts the material
+                    imported_skipped = []
+                    attribute_sections = []
                     for attribute_dict in material_attributes:
+                        attr_tag = attribute_dict.get("Tag", "")
+                        if _mat_attrs.is_new_format_only(attr_tag) or attr_tag in legacy_unsupported_aux:
+                            imported_skipped.append(attr_tag)
+                            continue
+                        if attr_tag in _mat_attrs.NEW_FORMAT_ONLY_WHEN_SET:
+                            set_value = _mat_attrs.get_attribute_value(material, attr_tag, attribute_dict.get("Value", 0))
+                            if any(set_value) if isinstance(set_value, (list, tuple)) else set_value:
+                                imported_skipped.append(attr_tag)
+                            continue
+
                         attribute_section = _SectionData("Attribute")
 
                         format_value = ""
@@ -644,13 +661,15 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                                         value.append(aux_prop.value)
                                 else:
                                     value = _mat_attrs.get_attribute_value(material, tag_prop, None)
-                                    if isinstance(value, (float, int)):
+                                    if isinstance(value, (float, int, str)):
                                         value = [value]
 
                                 if value is None:
-                                    attribute_section.props.append((attr_prop, ["i", tuple(attribute_dict[attr_prop])]))
-                                else:
-                                    attribute_section.props.append((attr_prop, ["i", tuple(value)]))
+                                    value = list(attribute_dict[attr_prop])
+                                aux_scale = _mat_attrs.get_legacy_aux_scale(effect_name, attr_tag)
+                                if aux_scale != 1.0:
+                                    value = [v * aux_scale for v in value]
+                                attribute_section.props.append((attr_prop, ["i", tuple(value)]))
 
                             elif attr_prop == "Tag" and "aux" in attribute_dict[attr_prop]:
                                 attribute_section.props.append((attr_prop, "aux[" + attribute_dict[attr_prop][3:] + "]"))
@@ -659,9 +678,15 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                             else:
                                 attribute_section.props.append((attr_prop, attribute_dict[attr_prop]))
 
-                        material_export_data.sections.append(attribute_section)
+                        attribute_sections.append(attribute_section)
 
+                    texture_sections = []
                     for texture_dict in material_textures:
+
+                        # heightmap textures belong to the heightmap flavour, which the legacy format can't carry
+                        if ".heightmap" in effect_name and texture_dict.get("Tag", ":").split(":")[1].startswith("texture_heightmap"):
+                            continue
+
                         texture_section = _SectionData("Texture")
 
                         tag_id_string = ""
@@ -669,7 +694,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             if tex_prop == "Tag":
                                 tag_id_string = texture_dict[tex_prop].split(':')[1]
-                                texture_section.props.append((tex_prop, texture_dict[tex_prop]))
+                                texture_section.props.append((tex_prop, "texture[%i]:%s" % (len(texture_sections), tag_id_string)))
 
                             elif tex_prop == "Value":
                                 if tag_id_string[8:] in material.scs_props.get_texture_types():
@@ -684,6 +709,24 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                             else:
                                 texture_section.props.append((tex_prop, texture_dict[tex_prop]))
 
+                        texture_sections.append(texture_section)
+
+                    if imported_skipped or ".heightmap" in effect_name:
+                        lprint("W Material %r uses settings the legacy material format can't store:\n\t   "
+                               "%s.\n\t   "
+                               "They were left out (and the heightmap flavour removed from the effect). "
+                               "Export with AutoMat (Game Data Format, ver. 5 (AutoMat)) to keep them.",
+                               (material.name, ", ".join(sorted(set(imported_skipped))) or "heightmap flavor"))
+
+                    material_export_data = _SectionData("Material")
+                    material_export_data.props.append(("Alias", material.name))
+                    material_export_data.props.append(("Effect", effect_name.replace(".heightmap", "")))
+                    material_export_data.props.append(("Flags", int(not material.scs_props.enable_aliasing)))
+                    material_export_data.props.append(("AttributeCount", len(attribute_sections)))
+                    material_export_data.props.append(("TextureCount", len(texture_sections)))
+                    for attribute_section in attribute_sections:
+                        material_export_data.sections.append(attribute_section)
+                    for texture_section in texture_sections:
                         material_export_data.sections.append(texture_section)
 
                 else:  # when user made material presets were there, but there is no preset library at export for some reason

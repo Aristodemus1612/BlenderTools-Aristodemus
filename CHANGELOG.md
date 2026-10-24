@@ -2,6 +2,50 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.1a (2026-10-24), material fixes and a larger archive browser
+
+### New
+- **Larger archive browser.** The magnifier buttons at the top right of the game-archive browser
+  make it larger or smaller (three sizes, with more rows in the larger ones). The size is kept for
+  the next import.
+- **Full names on hover.** Long file and folder names are cut off in the archive browser; hovering
+  over an entry now shows its full name and its path in the archive.
+
+### Fixes
+- **Far colour of terrain-style materials is no longer almost black.** Models converted with
+  ConverterPIX carry the far colour (`aux[2]` of `...tg0`/`tg1` materials) and `diffuse_secondary`
+  in linear colour, while SCS's conversion tool expects them in sRGB like all other colours. After
+  conversion they came out about ten times too dark (0.10 became 0.01). They are now converted on
+  import, like ConverterPIX does for the other colours.
+- **The legacy (Material) format writes the far colour in its own units.** The legacy format stores
+  `aux[2]` far colour and far specular power as 0-255 values; the add-on wrote 0-1, which the
+  conversion tool turned into black. Files in the legacy format are read the same way.
+- **Leaves keep their LOD selector.** Re-importing an AutoMat export kept only the first value of
+  `lod_selector` (`aux[1]` on `eut2.leaves`).
+- **Texture generation keeps its LOD switch distance.** Re-importing an AutoMat export lost
+  `lod_switch_distance` (the 4th value of `aux[0]` on `...tg0` materials).
+- **Sun-bounce flares no longer get a depth bias.** `eut2.flare.sun.bounce` stores its animation
+  sheet setup in `aux[0]`; AutoMat also wrote it as `depth_bias` (30), which the game's material
+  doesn't have.
+- **Animated water foam converts.** `animsheet_cfg_loop_offset_rnd`, used by newer `fadesheet`
+  materials, isn't known to SCS's conversion tools (2.21), so the model's `.pmd` wasn't written. It
+  is left out when 0 (as in the game's materials) and gets a warning otherwise.
+- **Container decals in the legacy format convert.** The conversion tool can't read
+  `amod_decal_blending_factors` (`aux[0]`) of `eut2.dif.spec.amod.dif.spec.add.env...` from the
+  legacy format; it is now left out there with a warning. AutoMat keeps it.
+- **Export no longer stops with "Unable to write unit property of type NoneType".** Materials
+  imported with a shader the add-on has no preset for ("imported shader", for example the
+  terrain transition `eut2.dif.spec.weight.weight.dif.spec.weight.fmtsnmapcalc.tg0.tg1.heightmap`
+  in `heavy_machinery_service_01_at`) made the AutoMat export crash on their substance. The
+  substance is written from the material's substance setting, and empty values are skipped with a
+  warning.
+- **Legacy export of imported shaders follows the same rules as other materials.** The edge-blend /
+  heightmap flavour, its heightmap textures and settings of the newer material format are left
+  out with a warning, so SCS's conversion tool accepts the material. Use AutoMat to keep them.
+- **Warning for flavours SCS's conversion tools can't convert.** Some newer game materials use the
+  `fmtsnmapcalc` flavour, which conversion tools 2.21 (the latest) can't decode, so the model's
+  `.pmd` isn't written. The export now says so and names the material.
+
 ## 2.5.1 (2026-10-23), import from game archives
 
 ### New

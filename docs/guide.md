@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus): User Guide
 
-*Version 2.5.1. Back to the [README](../README.md).*
+*Version 2.5.1a. Back to the [README](../README.md).*
 
 This guide covers the features this update adds. For everything else (SCS roots, locators,
 prefabs, export basics), the original documentation on the
@@ -251,6 +251,8 @@ included ConverterPIX by mwl4.
 2. **Pick the model.** The next window shows the archives' folders. Browse to the model's `.pmg`
    on the left. For an animated model, browse to its `.pma` files on the right and click each one
    to bring along: a click ticks or unticks it. Only ticked animations are converted.
+   Hover over an entry to see its full name and path when it's cut off. The magnifier buttons at
+   the top right make the window larger or smaller; the size is kept for the next import.
 3. **Import.** Converted files go into your **SCS Project Base Path**, keeping their game folders,
    and the model is imported. **Only convert?** converts without importing. **Textures to Base?**
    puts textures into a sibling `base` folder, so they aren't packed into your mod.
