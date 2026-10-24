@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus): User Guide
 
-*Version 2.5.1. Back to the [README](../README.md).*
+*Version 2.5.1a. Back to the [README](../README.md).*
 
 This guide covers the features this update adds. For everything else (SCS roots, locators,
 prefabs, export basics), the original documentation on the

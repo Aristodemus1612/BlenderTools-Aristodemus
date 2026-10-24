@@ -671,6 +671,7 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                 # MATERIAL EFFECT
                 effect_name = material.scs_props.mat_effect_name
+                _mat_attrs.warn_unsupported_flavors(material.name, effect_name)
 
                 # PRESET SHADERS
                 input_sections = []     # (FORMAT, tag, value)
@@ -777,6 +778,8 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
                         # print('     Attribute:')
 
                         format_prop = ""
+                        tag_prop = attribute_dict.get("Tag", "")
+                        value = None
                         for attr_prop in sorted(attribute_dict.keys()):
 
                             # get the format of current attribute (we assume that "Format" attribute is before "Value" attribute in this for loop)
@@ -802,6 +805,14 @@ def export(root_object, filepath, name_suffix, used_parts, used_materials):
 
                             elif attr_prop in ("FriendlyTag", "RequiredFlavors", "ForbiddenFlavors"):
                                 continue
+
+                        # substance is kept in the material's substance setting and written from there (above)
+                        if tag_prop == "substance":
+                            continue
+
+                        if value is None:
+                            lprint("W Material %r: attribute %r has no value, skipping it on export.", (material.name, tag_prop))
+                            continue
 
                         if format_prop not in ("FLOAT", "INT", "INT2", "STRING"):
                             value = tuple(value)

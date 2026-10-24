@@ -2,6 +2,22 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## 2.5.1a (2026-10-24), export fix for imported shaders
+
+### Fixes
+- **Export no longer stops with "Unable to write unit property of type NoneType".** Materials
+  imported with a shader the add-on has no preset for ("imported shader", for example the
+  terrain transition `eut2.dif.spec.weight.weight.dif.spec.weight.fmtsnmapcalc.tg0.tg1.heightmap`
+  in `heavy_machinery_service_01_at`) made the AutoMat export crash on their substance. The
+  substance is written from the material's substance setting, and empty values are skipped with a
+  warning.
+- **Legacy export of imported shaders follows the same rules as other materials.** The edge-blend /
+  heightmap flavour, its heightmap textures and settings of the newer material format are left
+  out with a warning, so SCS's conversion tool accepts the material. Use AutoMat to keep them.
+- **Warning for flavours SCS's conversion tools can't convert.** Some newer game materials use the
+  `fmtsnmapcalc` flavour, which conversion tools 2.21 (the latest) can't decode, so the model's
+  `.pmd` isn't written. The export now says so and names the material.
+
 ## 2.5.1 (2026-10-23), import from game archives
 
 ### New

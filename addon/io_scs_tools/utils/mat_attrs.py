@@ -44,6 +44,22 @@ NEW_FORMAT_ONLY_PREFIXES = ("heightmap_", "diffuse_secondary", "specular_seconda
 # with the usual warning when set
 NEW_FORMAT_ONLY_WHEN_SET = ("is_dynamic_road",)
 
+# effect flavours used by newer game materials that SCS's public conversion tools (2.21) can't decode;
+# such materials stop the conversion of the model's .pmd ("Unable to decode all flavors from effect")
+FLAVORS_UNSUPPORTED_BY_CONVERSION_TOOLS = ("fmtsnmapcalc",)
+
+
+def warn_unsupported_flavors(material_name, effect_name):
+    """Warn when the effect uses a flavour the public conversion tools can't convert."""
+    from io_scs_tools.utils.printout import lprint
+    flavors = effect_name.split(".")
+    unsupported = [f for f in FLAVORS_UNSUPPORTED_BY_CONVERSION_TOOLS if f in flavors]
+    if unsupported:
+        lprint("W Material %r uses the %s flavour, which SCS's conversion tools (2.21) can't convert yet: "
+               "the model's .pmd won't be written. Change the material's effect to a supported flavour "
+               "(e.g. 'tsnmapcalc' instead of 'fmtsnmapcalc') if you need to convert it.",
+               (material_name, ", ".join(unsupported)))
+
 
 def is_new_format_only(tag):
     """Tells if given attribute tag exists only in the newer (AutoMat) material format."""
