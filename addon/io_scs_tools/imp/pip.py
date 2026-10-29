@@ -130,7 +130,7 @@ def _get_node_properties(section):
             node_output_lanes = prop[1]
         elif prop[0] in ("TerPointCount", "TerrainPointCount"):
             node_terpoint_count = prop[1]
-        elif prop[0] in "TerrainPointVariantCount":
+        elif prop[0] == "TerrainPointVariantCount":
             node_terpoint_variant_count = prop[1]
         elif prop[0] == "StreamCount":
             node_stream_count = prop[1]
@@ -161,15 +161,41 @@ def _get_node_properties(section):
             elif stream_tag == '_VARIANT_BLOCK' and stream_format == 'INT2':
                 tp_variants = data_block
 
-    # even check stream count validity
-    assert node_terpoint_count == len(tp_positions)
-    assert node_terpoint_count == len(tp_normals)
+    # Check that the counts in the header match the stream data. Files from other tools (e.g. ZModeler)
+    # don't always fill in the header the way SCS's tools do, so mismatches are reported and repaired
+    # from the actual data instead of stopping the whole import.
+    who = node_name if node_name is not None else "index %s" % node_index
+    if node_terpoint_count is None:
+        node_terpoint_count = len(tp_positions)
 
-    if node_terpoint_variant_count:  # variant block exists
-        assert node_terpoint_variant_count == len(tp_variants)
-        assert node_stream_count == 3
-    else:
-        assert node_terpoint_count == 0 or node_stream_count == 2
+    point_count = min(len(tp_positions), len(tp_normals))
+    if node_terpoint_count != len(tp_positions) or node_terpoint_count != len(tp_normals):
+        lprint("W Node %r: terrain point count %s doesn't match its data (%s positions, %s normals); using %s points.",
+               (who, node_terpoint_count, len(tp_positions), len(tp_normals), point_count))
+    tp_positions = tp_positions[:point_count]
+    tp_normals = tp_normals[:point_count]
+
+    if node_terpoint_variant_count and node_terpoint_variant_count != len(tp_variants):
+        lprint("W Node %r: terrain point variant count %s doesn't match its data (%s variants); using the data.",
+               (who, node_terpoint_variant_count, len(tp_variants)))
+
+    valid_variants = []
+    for variant in tp_variants:
+        try:
+            start, count = int(variant[0]), int(variant[1])
+        except (TypeError, ValueError, IndexError):
+            start = count = -1
+        if start < 0 or count < 0 or start + count > point_count:
+            lprint("W Node %r: terrain point variant %s points outside its %s terrain points; it is left empty.",
+                   (who, tuple(variant) if isinstance(variant, (list, tuple)) else variant, point_count))
+            variant = (0, 0)  # keep the position, so later variants keep their index
+        valid_variants.append(variant)
+    tp_variants = valid_variants
+
+    expected_streams = (3 if tp_variants else 2) if point_count else None  # positions, normals (+ variant block)
+    if expected_streams and node_stream_count is not None and node_stream_count != expected_streams:
+        lprint("W Node %r: stream count %s in the header, but its data has %s streams; using the data.",
+               (who, node_stream_count, expected_streams))
 
     return (node_name,
             node_index,
