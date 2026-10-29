@@ -2,6 +2,15 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## Unreleased
+
+### Fixes
+- **Prefabs from other tools import again.** Importing a `.pip` stopped with an `AssertionError`
+  when a node's header counts (`StreamCount`, `TerrainPointCount`, `TerrainPointVariantCount`)
+  didn't match its stream data, as in prefabs exported from ZModeler 3. The importer now warns,
+  uses the actual data, and leaves a terrain point variant empty if it points past the node's
+  terrain points.
+
 ## 2.5.1a (2026-10-24), material fixes and a larger archive browser
 
 ### New
