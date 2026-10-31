@@ -1,7 +1,7 @@
 # ConverterPIX
 
 These are unmodified builds of **ConverterPIX** by mwl4, used by
-**File > Import > SCS Models from Game Archives (*.scs)**.
+**File > Import > SCS Models from Game Archives or Mod Folders**.
 
 - Source code: https://github.com/mwl4/ConverterPIX
 - Builds taken from commit `3cd4e73a86d0c6bd28e117664c50a36cabeccf38` (2025-06-25),

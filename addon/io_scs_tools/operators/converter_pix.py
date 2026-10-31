@@ -30,7 +30,7 @@ import subprocess
 import shutil
 from sys import platform
 from sys import maxsize
-from tempfile import mkdtemp
+from tempfile import mkdtemp, gettempdir
 from bpy.props import StringProperty, CollectionProperty, IntProperty, BoolProperty, PointerProperty, FloatProperty, EnumProperty
 from bpy_extras.io_utils import ImportHelper
 
@@ -254,6 +254,141 @@ def get_archive_listdir(file_paths, current_subpath):
             files.append(os.path.relpath(line[4:], current_subpath))
 
     return sorted(dirs), sorted(files)
+
+
+
+# ---------- zip archives that ConverterPIX can't read, and unpacked mod folders as bases
+
+# short path on purpose: Windows tools (ConverterPIX included) fail on paths over 260 characters
+_ZIP_CACHE_DIR = os.path.join(gettempdir(), "scs_zip")
+_ZIP_METHODS_CONVERTER_PIX = (0, 8)  # stored, deflate
+_ZIP_METHOD_NAMES = {9: "Deflate64", 12: "BZip2", 14: "LZMA", 93: "Zstandard", 95: "XZ", 98: "PPMd"}
+
+
+def get_zip_issue(path):
+    """Tell why ConverterPIX can't read this zip archive (it then lists it as empty).
+
+    ConverterPIX stops reading a zip at the first entry it doesn't support, and its file list stays empty.
+    The game and 7-Zip read these archives fine.
+
+    :param path: path to an archive
+    :type path: str
+    :return: reason, or None when the archive isn't a zip or ConverterPIX can read it
+    :rtype: str | None
+    """
+    import zipfile
+
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            if f.read(2) != b"PK":
+                return None  # HashFS archive, read by ConverterPIX itself
+        zf = zipfile.ZipFile(path)
+    except (OSError, zipfile.BadZipFile):
+        return None  # let ConverterPIX report it
+
+    with zf:
+        infos = zf.infolist()
+        if len(infos) > 60000:
+            return "it has more than 60000 entries"
+        if len(zf.comment) > 0x4000 - 22:
+            return "it has a long archive comment"
+        for info in infos:
+            name_bytes = len(info.orig_filename.encode("utf-8"))
+            if name_bytes == 0 or name_bytes > 255:
+                return "the path of %r is longer than 255 characters" % info.filename[:60]
+            if info.compress_type not in _ZIP_METHODS_CONVERTER_PIX:
+                method = _ZIP_METHOD_NAMES.get(info.compress_type, "method %s" % info.compress_type)
+                return "%r is compressed with %s (ConverterPIX reads only Deflate and Store)" % (info.filename, method)
+            if info.header_offset > 0xFFFFFFFF or info.file_size > 0xFFFFFFFF or info.compress_size > 0xFFFFFFFF:
+                return "it uses the ZIP64 format (archive or file larger than 4 GB)"
+            if info.filename.endswith("/") and not info.external_attr & 0x10:
+                return "its folder entries have no DOS folder attribute (packed by a tool that stores only Unix attributes)"
+    return None
+
+
+def _zip_cache_folder(path, skipped):
+    """Unpack a zip archive into the cache, once per archive version, and return the folder.
+
+    :param skipped: list that receives the names of entries that couldn't be unpacked
+    """
+    import zipfile
+    import hashlib
+
+    st = os.stat(path)
+    key = hashlib.sha1(("%s|%s|%s" % (os.path.abspath(path), st.st_size, st.st_mtime_ns)).encode("utf-8")).hexdigest()[:12]
+    folder = os.path.join(_ZIP_CACHE_DIR, key)
+    marker = os.path.join(folder, ".scs_tools_unpacked")
+
+    if not os.path.isfile(marker):
+        # remove older unpacked versions of the same archive
+        if os.path.isdir(_ZIP_CACHE_DIR):
+            path_key = hashlib.sha1(os.path.abspath(path).encode("utf-8")).hexdigest()[:12]
+            for old in os.listdir(_ZIP_CACHE_DIR):
+                old_marker = os.path.join(_ZIP_CACHE_DIR, old, ".scs_tools_unpacked")
+                if os.path.isfile(old_marker):
+                    with open(old_marker, encoding="utf-8") as f:
+                        if f.read().strip() == path_key:
+                            shutil.rmtree(os.path.join(_ZIP_CACHE_DIR, old), ignore_errors=True)
+        shutil.rmtree(folder, ignore_errors=True)
+        os.makedirs(folder)
+        with zipfile.ZipFile(path) as zf:
+            for info in zf.infolist():
+                try:
+                    zf.extract(info, folder)
+                except OSError:  # e.g. a path too long for the file system; the rest is still usable
+                    skipped.append(info.filename)
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write(hashlib.sha1(os.path.abspath(path).encode("utf-8")).hexdigest()[:12])
+    return folder
+
+
+_PIX_EXTENSIONS = (".pim", ".pit", ".pis", ".pia", ".pic", ".pip", ".pim.json")
+
+
+def _is_inside_any(path, folders):
+    """Is the path one of the folders or inside one of them?"""
+    path = os.path.normcase(os.path.abspath(path))
+    for folder in folders:
+        folder = os.path.normcase(os.path.abspath(folder))
+        if path == folder or path.startswith(folder.rstrip("\\/") + os.sep):
+            return True
+    return False
+
+
+def prepare_bases(paths):
+    """Turn the chosen archives and folders into paths ConverterPIX can mount.
+
+    Folders (unpacked mods) are passed as they are; ConverterPIX reads them directly. Zip archives that
+    ConverterPIX would list as empty are unpacked into a cache folder, which is used instead.
+
+    :param paths: archive and folder paths, in priority order
+    :type paths: list[str]
+    :return: paths to give ConverterPIX, and messages for the user
+    :rtype: (list[str], list[str])
+    """
+    bases = []
+    messages = []
+    for path in paths:
+        path = path.rstrip("\\/") if len(path) > 3 else path
+        issue = get_zip_issue(path)
+        if issue:
+            try:
+                skipped = []
+                bases.append(_zip_cache_folder(path, skipped))
+                messages.append("%s: ConverterPIX can't read this zip (%s), so it was unpacked to a cache folder and read from there."
+                                % (os.path.basename(path), issue))
+                if skipped:
+                    messages.append("%s: %s file(s) couldn't be unpacked and are missing, e.g. %r."
+                                    % (os.path.basename(path), len(skipped), skipped[0][:80]))
+                continue
+            except (OSError, NotImplementedError, RuntimeError) as e:
+                # NotImplementedError: compression Python can't unpack either (e.g. Deflate64)
+                messages.append("%s: ConverterPIX can't read this zip (%s), and it couldn't be unpacked (%s). "
+                                "Repack it with Deflate or Store compression." % (os.path.basename(path), issue, e))
+        bases.append(path)
+    return bases, messages
 
 
 # sizes of the archive browser dialog: (identifier, name, dialog width in UI units, list rows)
@@ -519,6 +654,16 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         description="Use ConverterPIX only for conversion of resources into SCS Project Base Path and import manually later?",
     )
 
+    display_paths: CollectionProperty(
+        description="Archives and folders as the user chose them (a zip may be read from its unpacked copy).",
+        type=bpy.types.OperatorFileListElement,
+    )
+
+    source_folders: CollectionProperty(
+        description="Unpacked mod folders used as sources; existing files in them are never overwritten.",
+        type=bpy.types.OperatorFileListElement,
+    )
+
     textures_to_base: BoolProperty(
         description="Should textures be copied into the sibling 'base' directory, so they won't be included in mod packing?",
     )
@@ -621,6 +766,8 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
             textures_project_path = os.path.join(models_project_path, os.pardir, "base")
 
         # distribute converted data to appropriate folder
+        source_folders = [entry.name for entry in self.source_folders]
+        kept_in_source = 0
         for root, dirs, files in os.walk(export_path, topdown=False):
             file_subdir = os.path.relpath(root, export_path)
             for file in files:
@@ -633,10 +780,22 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
 
                 src_path = os.path.join(root, file)
                 dst_path = os.path.join(file_dstdir, file)
+                if (os.path.exists(dst_path) and not file.lower().endswith(_PIX_EXTENSIONS)
+                        and _is_inside_any(dst_path, source_folders)):
+                    # never replace the mod's own files (textures, materials) with ConverterPIX's copies;
+                    # the converted .pim/.pit/... files are always updated
+                    os.remove(src_path)
+                    kept_in_source += 1
+                    continue
                 shutil.move(src_path, dst_path)
 
             # dirs cleanup - with the help of disabled topdown listing, remove empty dirs here including topmost export path
             os.rmdir(root)
+
+        if kept_in_source:
+            self.report({'INFO'}, "%s existing file(s) in the mod folder were kept unchanged." % kept_in_source)
+        if _is_inside_any(models_project_path, source_folders) or any(_is_inside_any(folder, [models_project_path]) for folder in source_folders):
+            self.report({'WARNING'}, "The SCS Project Base Path and the mod folder overlap: the converted .pim/.pit files were written into the mod folder.")
 
         # now do actual import with BT
         if not self.only_convert:
@@ -667,7 +826,8 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
         # clip browsers slider to proper upper and lower values to avoid UI problems with split
         split_factor = 0.5
 
-        archive_names = [os.path.basename(archive_path.name) for archive_path in self.archive_paths]
+        shown_paths = self.display_paths if len(self.display_paths) else self.archive_paths
+        archive_names = [os.path.basename(archive_path.name) for archive_path in shown_paths]
         size_id, size_name, width_units, list_rows = _browser_size(SCS_TOOLS_OT_ConvPIXListImport.get_size())
         size_index = [s[0] for s in BROWSER_SIZES].index(size_id)
 
@@ -738,8 +898,9 @@ class SCS_TOOLS_OT_ConvPIXListImport(bpy.types.Operator):
 
 class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
     bl_idname = "scs_tools.converter_pix_import"
-    bl_label = "Import SCS Models from Game Archives (*.scs)"
-    bl_description = "Convert a model straight from game archives (.scs) with ConverterPIX and import it"
+    bl_label = "Import SCS Models from Game Archives or Mod Folders"
+    bl_description = ("Convert a model straight from game archives (.scs, .zip) or an unpacked mod folder (.pmd/.pmg files) "
+                      "with ConverterPIX and import it")
     bl_options = {'UNDO', 'PRESET'}
 
     directory: StringProperty()
@@ -757,6 +918,12 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
     archives_to_use_mode: BoolProperty(
         default=False,
         description="Add currently selected files to list of archives to be used with ConverterPIX as bases."
+    )
+
+    add_folder_mode: BoolProperty(
+        default=False,
+        description="Add the folder open in the file browser to the list, as an unpacked mod or game folder. "
+                    "Use the mod's root folder, the one that holds folders like 'vehicle', 'model' or 'material'"
     )
 
     delete_selected_archives_mode: BoolProperty(
@@ -835,6 +1002,15 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
 
             self.archives_to_use_mode = False
 
+        elif self.add_folder_mode:  # add the folder open in the browser as an unpacked mod
+
+            folder = self.directory.rstrip("\\/") if len(self.directory) > 3 else self.directory
+            if os.path.isdir(folder) and folder not in [archive.path for archive in self.archives_to_use]:
+                new_archive_to_use = self.archives_to_use.add()
+                new_archive_to_use.path = folder
+
+            self.add_folder_mode = False
+
         elif self.delete_selected_archives_mode:  # delete selected archives from list
 
             i = 0
@@ -878,14 +1054,32 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
 
-        archive_paths = [{"name": archive.path} for archive in self.archives_to_use]
+        paths = [archive.path for archive in self.archives_to_use]
 
         # additionally add currently selected archives
-        for file_name in self.ordered_files:
-            archive_paths.append({"name": os.path.join(self.directory, file_name)})
+        selected = [os.path.join(self.directory, file_name) for file_name in self.ordered_files
+                    if os.path.isfile(os.path.join(self.directory, file_name))]
+        paths.extend(selected)
+
+        # nothing selected: the folder open in the browser is an unpacked mod
+        if not selected and os.path.isdir(self.directory):
+            folder = self.directory.rstrip("\\/") if len(self.directory) > 3 else self.directory
+            if folder not in paths:
+                paths.append(folder)
+
+        if not paths:
+            self.report({'WARNING'}, "Select an archive, or open a mod folder, to import from.")
+            return {'CANCELLED'}
+
+        bases, messages = prepare_bases(paths)
+        for message in messages:
+            print(message)
+            self.report({'WARNING'}, message)
 
         bpy.ops.scs_tools.converter_pix_list_import("INVOKE_DEFAULT",
-                                                   archive_paths=archive_paths,
+                                                   archive_paths=[{"name": base} for base in bases],
+                                                   display_paths=[{"name": path} for path in paths],
+                                                   source_folders=[{"name": path} for path in paths if os.path.isdir(path)],
                                                    only_convert=self.only_convert,
                                                    textures_to_base=self.textures_to_base)
 
@@ -914,7 +1108,7 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
         exe_row.operator(SCS_TOOLS_OT_ConvPIXUpdate.bl_idname, text="", icon="URL")
 
         files_box = self.layout.box()
-        files_box.row().label(text="Extra Archives to Use:")
+        files_box.row().label(text="Extra Archives and Folders to Use:")
 
         is_any_archive_selected = False
         files_list_col = files_box.column(align=True)
@@ -931,7 +1125,7 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
 
         else:
 
-            files_list_col.label(text="No extra archives!", icon="INFO")
+            files_list_col.label(text="No extra archives or folders!", icon="INFO")
 
         # show controls of list only if sth is selected
         if is_any_archive_selected:
@@ -942,6 +1136,12 @@ class SCS_TOOLS_OT_ConvPIXImport(bpy.types.Operator, ImportHelper):
             row.prop(self, "move_down_selected_archives_mode", text="Down", icon="TRIA_DOWN")
 
         files_list_col.prop(self, "archives_to_use_mode", toggle=True, text="Add Archives to List", icon='PASTEDOWN')
+        files_list_col.prop(self, "add_folder_mode", toggle=True, text="Add Current Folder to List", icon='FILE_FOLDER')
+        if not self.ordered_files:
+            hint = files_box.column(align=True)
+            hint.scale_y = 0.8
+            hint.label(text="No archive selected:", icon="INFO")
+            hint.label(text="the open folder is read as an unpacked mod.")
 
         settings_col = self.layout.box().column(align=True)
         settings_col.prop(self, "only_convert")
@@ -991,7 +1191,7 @@ class SCS_TOOLS_OT_ConvPIXUpdate(bpy.types.Operator):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(SCS_TOOLS_OT_ConvPIXImport.bl_idname, text="SCS Models from Game Archives (*.scs)")
+    self.layout.operator(SCS_TOOLS_OT_ConvPIXImport.bl_idname, text="SCS Models from Game Archives or Mod Folders")
 
 
 classes = (

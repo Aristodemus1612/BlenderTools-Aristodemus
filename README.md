@@ -78,7 +78,7 @@ change is listed in the **[Changelog](CHANGELOG.md)**.
   export.
 
 ### Importing from game archives
-- **Import straight from `.scs` archives.** **File > Import > SCS Models from Game Archives (*.scs)**
+- **Import straight from `.scs` archives or unpacked mod folders.** **File > Import > SCS Models from Game Archives or Mod Folders**
   browses the game's archives, converts the model you pick (with its animations, if you want them)
   and imports it. ConverterPIX is included, so nothing else needs installing. Based on
   50keda's ConverterPIX Wrapper.
@@ -210,10 +210,12 @@ See the [User Guide](docs/guide.md#1-setting-up-paths) for more examples.
 
 ## Getting game models into Blender
 
-Use **File > Import > SCS Models from Game Archives (*.scs)**:
+Use **File > Import > SCS Models from Game Archives or Mod Folders**:
 1. Set your **SCS Project Base Path** first. Converted files are written there.
 2. Pick one or more archives, for example `base.scs`, `base_share.scs`, `def.scs` and the DLC
    archives the model needs. Add archives you always use with **Add Archives to List**.
+   To import from an **unpacked mod**, open the mod's root folder and click Import without
+   selecting an archive, or add it with **Add Current Folder to List**.
 3. In the next window, browse to the model (`.pmg`) on the left. For an animated model, browse to
    its animations (`.pma`) on the right and click each one to tick it.
 4. Click **OK**. The model is converted into your project and imported. Tick **Only convert?** to

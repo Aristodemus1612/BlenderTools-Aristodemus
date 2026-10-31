@@ -2,6 +2,27 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
+## Unreleased
+
+### New
+- **Import from unpacked mod folders.** The archive importer now also reads a mod folder with
+  `.pmd`/`.pmg` files, so a model can be imported without packing the mod first. Open the mod's
+  root folder in the file browser and click Import without selecting an archive, or add the folder
+  to the list with **Add Current Folder to List** (folders and archives can be mixed, e.g. the mod
+  folder plus `base.scs`). Existing textures and materials in the mod folder are never overwritten.
+
+### Fixes
+- **Zip archives that ConverterPIX lists as empty can be imported.** ConverterPIX stops reading a
+  zip at the first entry it doesn't support and then shows the archive as empty, although the game
+  and 7-Zip read it: entries compressed with anything but Deflate or Store (LZMA, BZip2, Deflate64…),
+  paths longer than 255 characters, ZIP64, or folder entries without the DOS folder attribute. Such
+  archives are now unpacked to a temporary folder, read from there, and the reason is reported.
+- **Prefabs from other tools import again.** Importing a `.pip` stopped with an `AssertionError`
+  when a node's header counts (`StreamCount`, `TerrainPointCount`, `TerrainPointVariantCount`)
+  didn't match its stream data, as in prefabs exported from ZModeler 3. The importer now warns,
+  uses the actual data, and leaves a terrain point variant empty if it points past the node's
+  terrain points.
+
 ## 2.5.1a (2026-10-24), material fixes and a larger archive browser
 
 ### New
