@@ -2,7 +2,7 @@
 
 All notable changes to SCS Tools (Aristodemus).
 
-## Unreleased
+## 2.5.1b (2026-11-11), mod folders, zip archives and ZModeler prefabs
 
 ### New
 - **Import from unpacked mod folders.** The archive importer now also reads a mod folder with
