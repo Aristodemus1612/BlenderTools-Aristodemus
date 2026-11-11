@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus): User Guide
 
-*Version 2.5.1a. Back to the [README](../README.md).*
+*Version 2.5.1b. Back to the [README](../README.md).*
 
 This guide covers the features this update adds. For everything else (SCS roots, locators,
 prefabs, export basics), the original documentation on the
@@ -240,14 +240,27 @@ using game textures without copying them.
 
 ## 8. Importing from game archives
 
-**File > Import > SCS Models from Game Archives (*.scs)** converts a model straight out of the
-game's `.scs` archives and imports it. It is based on 50keda's ConverterPIX Wrapper and uses the
+**File > Import > SCS Models from Game Archives or Mod Folders** converts a model straight out of
+the game's `.scs` archives, or out of an unpacked mod folder, and imports it. It is based on 50keda's ConverterPIX Wrapper and uses the
 included ConverterPIX by mwl4.
 
 1. **Pick archives.** Select one or more `.scs` (or `.zip`) files. A model usually needs
    `base.scs` and `base_share.scs`; materials and textures may come from `def.scs`, `base_map.scs`
    or DLC archives. Archives you always need can be added once with **Add Archives to List** and
    reordered or removed there.
+
+   **Unpacked mods:** open the mod's root folder (the one holding `vehicle`, `model`, `material`
+   and so on) and click Import without selecting an archive, or add it with **Add Current Folder
+   to List**. Folders and archives can be mixed, for example your mod folder plus `base.scs` for
+   the game files it uses. The `.pmd`/`.pmg` files are read directly, so there's no need to pack
+   the mod after each change. Textures and materials already in the mod folder are never
+   overwritten; if your SCS Project Base Path is the mod folder itself, the converted `.pim`/`.pit`
+   files are written into it, and the importer warns about that.
+
+   **Zip archives listed as empty:** ConverterPIX can't read some zip archives that the game reads
+   fine (LZMA or other non-Deflate compression, paths over 255 characters, ZIP64, or folder entries
+   packed by some tools) and shows them as empty. The importer detects these, unpacks them to a
+   temporary folder, reads them from there and says why. To avoid it, pack with Deflate or Store.
 2. **Pick the model.** The next window shows the archives' folders. Browse to the model's `.pmg`
    on the left. For an animated model, browse to its `.pma` files on the right and click each one
    to bring along: a click ticks or unticks it. Only ticked animations are converted.

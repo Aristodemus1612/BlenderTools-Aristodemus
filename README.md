@@ -1,6 +1,6 @@
 # SCS Tools (Aristodemus)
 
-![Version](https://img.shields.io/badge/version-2.5.1a-blue)
+![Version](https://img.shields.io/badge/version-2.5.1b-blue)
 ![Status](https://img.shields.io/badge/status-test%20release-orange)
 ![Blender](https://img.shields.io/badge/Blender-5.0%2B-e87d0d)
 ![Game](https://img.shields.io/badge/ETS2%20%2F%20ATS-1.61-2b6cb0)
@@ -78,7 +78,7 @@ change is listed in the **[Changelog](CHANGELOG.md)**.
   export.
 
 ### Importing from game archives
-- **Import straight from `.scs` archives.** **File > Import > SCS Models from Game Archives (*.scs)**
+- **Import straight from `.scs` archives or unpacked mod folders.** **File > Import > SCS Models from Game Archives or Mod Folders**
   browses the game's archives, converts the model you pick (with its animations, if you want them)
   and imports it. ConverterPIX is included, so nothing else needs installing. Based on
   50keda's ConverterPIX Wrapper.
@@ -116,7 +116,7 @@ release, Michaleczeq's fork or an earlier test build.
 
 ### 2. Install this version
 
-1. Download `scs_tools_aristodemus_2.5.1a.zip` from the
+1. Download `scs_tools_aristodemus_2.5.1b.zip` from the
    [Releases](../../releases) page. Don't unpack it.
 2. In **Edit > Preferences > Add-ons**, open the drop-down menu at the top right and choose
    **Install from Disk**. Select the zip.
@@ -210,10 +210,12 @@ See the [User Guide](docs/guide.md#1-setting-up-paths) for more examples.
 
 ## Getting game models into Blender
 
-Use **File > Import > SCS Models from Game Archives (*.scs)**:
+Use **File > Import > SCS Models from Game Archives or Mod Folders**:
 1. Set your **SCS Project Base Path** first. Converted files are written there.
 2. Pick one or more archives, for example `base.scs`, `base_share.scs`, `def.scs` and the DLC
    archives the model needs. Add archives you always use with **Add Archives to List**.
+   To import from an **unpacked mod**, open the mod's root folder and click Import without
+   selecting an archive, or add it with **Add Current Folder to List**.
 3. In the next window, browse to the model (`.pmg`) on the left. For an animated model, browse to
    its animations (`.pma`) on the right and click each one to tick it.
 4. Click **OK**. The model is converted into your project and imported. Tick **Only convert?** to
@@ -293,6 +295,7 @@ Open an issue in the [Issues](../../issues) tab and include:
 | **Simon Lusenc (50keda)** | ConverterPIX Wrapper, the base of the game archive importer |
 | **mwl4** | ConverterPIX, included for bringing game models into Blender |
 | **[IcemanRU](https://forum.scssoft.com/memberlist.php?mode=viewprofile&u=478774)** | Testing and bug reports |
+| **[HN TruckTuning](https://forum.scssoft.com/memberlist.php?mode=viewprofile&u=338751)** | Bug reports |
 | **Aristodemus** | This update |
 
 ## Licence
